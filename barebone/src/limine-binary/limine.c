@@ -1,5 +1,6 @@
 #undef IS_WINDOWS
-#if (defined(WIN32) || defined(_WIN32) || defined(__WIN32)) && !defined(__CYGWIN__)
+#if (defined(WIN32) || defined(_WIN32) || defined(__WIN32)) &&                 \
+    !defined(__CYGWIN__)
 #define IS_WINDOWS 1
 #endif
 
@@ -90,7 +91,7 @@ static int set_pos(FILE *stream, uint64_t pos) {
 
 struct gpt_table_header {
     // the head
-    char     signature[8];
+    char signature[8];
     uint32_t revision;
     uint32_t header_size;
     uint32_t crc32;
@@ -135,15 +136,15 @@ struct gpt2mbr_type_conv {
 // all that matters for ISOHYBRIDs.
 // Of course, though, expansion is welcome.
 static struct gpt2mbr_type_conv gpt2mbr_type_conv_table[] = {
-    { 0x11d2f81fc12a7328, 0x3bc93ec9a0004bba, 0xef }, // EFI system partition
-    { 0x4433b9e5ebd0a0a2, 0xc79926b7b668c087, 0x07 }, // Microsoft basic data
-    { 0x11aa000048465300, 0xacec4365300011aa, 0xaf }, // HFS/HFS+
+    {0x11d2f81fc12a7328, 0x3bc93ec9a0004bba, 0xef}, // EFI system partition
+    {0x4433b9e5ebd0a0a2, 0xc79926b7b668c087, 0x07}, // Microsoft basic data
+    {0x11aa000048465300, 0xacec4365300011aa, 0xaf}, // HFS/HFS+
 };
 
 static int gpt2mbr_type(uint64_t gpt_type1, uint64_t gpt_type2) {
     for (size_t i = 0; i < SIZEOF_ARRAY(gpt2mbr_type_conv_table); i++) {
-        if (gpt2mbr_type_conv_table[i].gpt_type1 == gpt_type1
-         && gpt2mbr_type_conv_table[i].gpt_type2 == gpt_type2) {
+        if (gpt2mbr_type_conv_table[i].gpt_type1 == gpt_type1 &&
+            gpt2mbr_type_conv_table[i].gpt_type2 == gpt_type2) {
             return gpt2mbr_type_conv_table[i].mbr_type;
         }
     }
@@ -158,7 +159,7 @@ static void lba2chs(uint8_t *chs, uint64_t lba) {
 
     uint64_t cylinder = lba / (255 * 63);
     if (cylinder >= 1024) {
-lba_too_big:
+    lba_too_big:
         chs[0] = 0xfe;
         chs[1] = 0xff;
         chs[2] = 0xff;
@@ -183,8 +184,8 @@ static uint16_t endswap16(uint16_t value) {
 static uint32_t endswap32(uint32_t value) {
     uint32_t ret = 0;
     ret |= (value >> 24) & 0x000000ff;
-    ret |= (value >> 8)  & 0x0000ff00;
-    ret |= (value << 8)  & 0x00ff0000;
+    ret |= (value >> 8) & 0x0000ff00;
+    ret |= (value << 8) & 0x00ff0000;
     ret |= (value << 24) & 0xff000000;
     return ret;
 }
@@ -194,8 +195,8 @@ static uint64_t endswap64(uint64_t value) {
     ret |= (value >> 56) & 0x00000000000000ff;
     ret |= (value >> 40) & 0x000000000000ff00;
     ret |= (value >> 24) & 0x0000000000ff0000;
-    ret |= (value >> 8)  & 0x00000000ff000000;
-    ret |= (value << 8)  & 0x000000ff00000000;
+    ret |= (value >> 8) & 0x00000000ff000000;
+    ret |= (value << 8) & 0x000000ff00000000;
     ret |= (value << 24) & 0x0000ff0000000000;
     ret |= (value << 40) & 0x00ff000000000000;
     ret |= (value << 56) & 0xff00000000000000;
@@ -216,24 +217,22 @@ static bool bigendian = false;
 
 #endif /* !__BYTE_ORDER__ */
 
-#define ENDSWAP(VALUE) (bigendian ? (                    \
-    sizeof(VALUE) == 1 ? (VALUE)          :              \
-    sizeof(VALUE) == 2 ? endswap16(VALUE) :              \
-    sizeof(VALUE) == 4 ? endswap32(VALUE) :              \
-    sizeof(VALUE) == 8 ? endswap64(VALUE) : (abort(), 1) \
-) : (VALUE))
+#define ENDSWAP(VALUE)                                                         \
+    (bigendian ? (sizeof(VALUE) == 1   ? (VALUE)                               \
+                  : sizeof(VALUE) == 2 ? endswap16(VALUE)                      \
+                  : sizeof(VALUE) == 4 ? endswap32(VALUE)                      \
+                  : sizeof(VALUE) == 8 ? endswap64(VALUE)                      \
+                                       : (abort(), 1))                         \
+               : (VALUE))
 
-static enum {
-    CACHE_CLEAN,
-    CACHE_DIRTY
-} cache_state;
+static enum { CACHE_CLEAN, CACHE_DIRTY } cache_state;
 static uint64_t cached_block;
-static uint8_t *cache  = NULL;
-static FILE    *device = NULL;
-static size_t   block_size;
+static uint8_t *cache = NULL;
+static FILE *device = NULL;
+static size_t block_size;
 
 static bool device_init(void) {
-    size_t guesses[] = { 512, 2048, 4096 };
+    size_t guesses[] = {512, 2048, 4096};
 
     for (size_t i = 0; i < SIZEOF_ARRAY(guesses); i++) {
         void *tmp = realloc(cache, guesses[i]);
@@ -256,12 +255,13 @@ static bool device_init(void) {
             fprintf(stderr, "Physical block size of %zu bytes.\n", block_size);
         }
 
-        cache_state  = CACHE_CLEAN;
+        cache_state = CACHE_CLEAN;
         cached_block = 0;
         return true;
     }
 
-    fprintf(stderr, "error: device_init(): Couldn't determine block size of device.\n");
+    fprintf(stderr,
+            "error: device_init(): Couldn't determine block size of device.\n");
     return false;
 }
 
@@ -338,11 +338,13 @@ static uint64_t uninstall_data_i = 0;
 static const char *uninstall_file = NULL;
 
 static void reverse_uninstall_data(void) {
-    for (size_t i = 0, j = uninstall_data_i - 1; i < uninstall_data_i; i++, j--) {
+    for (size_t i = 0, j = uninstall_data_i - 1; i < uninstall_data_i;
+         i++, j--) {
         uninstall_data_rev[j] = uninstall_data[i];
     }
 
-    memcpy(uninstall_data, uninstall_data_rev, uninstall_data_i * sizeof(struct uninstall_data));
+    memcpy(uninstall_data, uninstall_data_rev,
+           uninstall_data_i * sizeof(struct uninstall_data));
 }
 
 static void free_uninstall_data(void) {
@@ -370,10 +372,12 @@ static bool store_uninstall_data(const char *filename) {
         if (fwrite(&uninstall_data[i].loc, sizeof(uint64_t), 1, udfile) != 1) {
             goto fwrite_error;
         }
-        if (fwrite(&uninstall_data[i].count, sizeof(uint64_t), 1, udfile) != 1) {
+        if (fwrite(&uninstall_data[i].count, sizeof(uint64_t), 1, udfile) !=
+            1) {
             goto fwrite_error;
         }
-        if (fwrite(uninstall_data[i].data, uninstall_data[i].count, 1, udfile) != 1) {
+        if (fwrite(uninstall_data[i].data, uninstall_data[i].count, 1,
+                   udfile) != 1) {
             goto fwrite_error;
         }
     }
@@ -401,7 +405,8 @@ static bool load_uninstall_data(const char *filename) {
     uint64_t count = 0;
 
     if (!quiet) {
-        fprintf(stderr, "Loading uninstall data from file: `%s`...\n", filename);
+        fprintf(stderr, "Loading uninstall data from file: `%s`...\n",
+                filename);
     }
 
     FILE *udfile = fopen(filename, "rb");
@@ -417,7 +422,8 @@ static bool load_uninstall_data(const char *filename) {
     }
 
     if (count > UNINSTALL_DATA_MAX) {
-        fprintf(stderr, "error: load_uninstall_data(): too many entries (%zu > %d)\n",
+        fprintf(stderr,
+                "error: load_uninstall_data(): too many entries (%zu > %d)\n",
                 (size_t)count, UNINSTALL_DATA_MAX);
         goto error;
     }
@@ -430,7 +436,8 @@ static bool load_uninstall_data(const char *filename) {
             goto fread_error;
         }
         if (uninstall_data[i].count > SIZE_MAX) {
-            fprintf(stderr, "error: load_uninstall_data(): entry size too large\n");
+            fprintf(stderr,
+                    "error: load_uninstall_data(): entry size too large\n");
             goto error;
         }
         uninstall_data[i].data = malloc((size_t)uninstall_data[i].count);
@@ -438,7 +445,8 @@ static bool load_uninstall_data(const char *filename) {
             perror_wrap("error: load_uninstall_data(): malloc()");
             goto error;
         }
-        if (fread(uninstall_data[i].data, uninstall_data[i].count, 1, udfile) != 1) {
+        if (fread(uninstall_data[i].data, uninstall_data[i].count, 1, udfile) !=
+            1) {
             free(uninstall_data[i].data);
             goto fread_error;
         }
@@ -494,7 +502,8 @@ static bool device_write_raw(const void *_buffer, uint64_t loc, size_t count) {
     }
 
     if (uninstall_data_i >= UNINSTALL_DATA_MAX) {
-        fprintf(stderr, "error: Too many uninstall data entries! Please report this bug upstream.\n");
+        fprintf(stderr, "error: Too many uninstall data entries! Please report "
+                        "this bug upstream.\n");
         return false;
     }
 
@@ -565,7 +574,10 @@ static bool uninstall(bool quiet_arg) {
                 break;
             }
             if (!quiet) {
-                fprintf(stderr, "warning: Uninstall data index %zu failed to write, retrying...\n", i);
+                fprintf(stderr,
+                        "warning: Uninstall data index %zu failed to write, "
+                        "retrying...\n",
+                        i);
             }
             if (!device_flush_cache()) {
                 print_cache_flush_fail = true;
@@ -581,12 +593,14 @@ static bool uninstall(bool quiet_arg) {
     }
 
     if (print_write_fail) {
-        fprintf(stderr, "error: Some data failed to be uninstalled correctly.\n");
+        fprintf(stderr,
+                "error: Some data failed to be uninstalled correctly.\n");
         ret = false;
     }
 
     if (print_cache_flush_fail) {
-        fprintf(stderr, "error: Device cache flush failure. Uninstall may be incomplete.\n");
+        fprintf(stderr, "error: Device cache flush failure. Uninstall may be "
+                        "incomplete.\n");
         ret = false;
     }
 
@@ -597,34 +611,41 @@ static bool uninstall(bool quiet_arg) {
     return ret;
 }
 
-#define device_read(BUFFER, LOC, COUNT)        \
-    do {                                       \
-        if (!device_read_raw(BUFFER, LOC, COUNT)) \
-            goto cleanup;                      \
+#define device_read(BUFFER, LOC, COUNT)                                        \
+    do {                                                                       \
+        if (!device_read_raw(BUFFER, LOC, COUNT))                              \
+            goto cleanup;                                                      \
     } while (0)
 
-#define device_write(BUFFER, LOC, COUNT)        \
-    do {                                        \
-        if (!device_write_raw(BUFFER, LOC, COUNT)) \
-            goto cleanup;                       \
+#define device_write(BUFFER, LOC, COUNT)                                       \
+    do {                                                                       \
+        if (!device_write_raw(BUFFER, LOC, COUNT))                             \
+            goto cleanup;                                                      \
     } while (0)
 
 static void bios_install_usage(void) {
-    printf("usage: %s bios-install <device> [GPT partition index]\n", program_name);
+    printf("usage: %s bios-install <device> [GPT partition index]\n",
+           program_name);
     printf("\n");
-    printf("    --force         Force installation even if the safety checks fail\n");
+    printf("    --force         Force installation even if the safety checks "
+           "fail\n");
     printf("                    (DANGEROUS!)\n");
     printf("\n");
     printf("    --uninstall     Reverse the entire install procedure\n");
     printf("\n");
     printf("    --uninstall-data-file=<filename>\n");
-    printf("                    Set the input (for --uninstall) or output file\n");
-    printf("                    name of the file which contains uninstall data\n");
+    printf(
+        "                    Set the input (for --uninstall) or output file\n");
+    printf(
+        "                    name of the file which contains uninstall data\n");
     printf("\n");
     printf("    --no-gpt-to-mbr-isohybrid-conversion\n");
-    printf("                    Do not automatically convert a GUID partition table (GPT)\n");
-    printf("                    found on an ISOHYBRID image into an MBR partition table\n");
-    printf("                    (which is done for better hardware compatibility)\n");
+    printf("                    Do not automatically convert a GUID partition "
+           "table (GPT)\n");
+    printf("                    found on an ISOHYBRID image into an MBR "
+           "partition table\n");
+    printf("                    (which is done for better hardware "
+           "compatibility)\n");
     printf("\n");
     printf("    --quiet         Do not print verbose diagnostic messages\n");
     printf("\n");
@@ -733,8 +754,8 @@ static bool gpt_header_crc(uint64_t loc, uint32_t header_size, uint32_t *out) {
         }
 
         for (uint32_t i = 0; i < step; i++) {
-            if (done + i >= GPT_HEADER_CRC_OFFSET
-             && done + i < GPT_HEADER_CRC_OFFSET + 4) {
+            if (done + i >= GPT_HEADER_CRC_OFFSET &&
+                done + i < GPT_HEADER_CRC_OFFSET + 4) {
                 chunk[i] = 0;
             }
         }
@@ -797,16 +818,16 @@ static bool gpt_verify_header(const struct gpt_table_header *header,
         return false;
     }
 
-    if (!gpt_header_crc(header_loc, header_size, &crc)
-     || crc != ENDSWAP(header->crc32)) {
+    if (!gpt_header_crc(header_loc, header_size, &crc) ||
+        crc != ENDSWAP(header->crc32)) {
         return false;
     }
 
     // "shall be set to a value of 128 x 2^n", which is to say a power of two no
     // smaller than an entry. Revisions before 2.8 allowed any multiple of 8.
     entry_size = ENDSWAP(header->size_of_partition_entry);
-    if (entry_size < sizeof(struct gpt_entry)
-     || (entry_size & (entry_size - 1)) != 0) {
+    if (entry_size < sizeof(struct gpt_entry) ||
+        (entry_size & (entry_size - 1)) != 0) {
         return false;
     }
 
@@ -815,14 +836,14 @@ static bool gpt_verify_header(const struct gpt_table_header *header,
         return false;
     }
 
-    if (array_size == 0 || array_size > GPT_MAX_ARRAY_SIZE
-     || array_size > *budget) {
+    if (array_size == 0 || array_size > GPT_MAX_ARRAY_SIZE ||
+        array_size > *budget) {
         return false;
     }
 
-    // The array is reserved outside the usable range: it precedes FirstUsableLBA
-    // on the primary, and follows LastUsableLBA and precedes its own header on
-    // the alternate.
+    // The array is reserved outside the usable range: it precedes
+    // FirstUsableLBA on the primary, and follows LastUsableLBA and precedes its
+    // own header on the alternate.
     uint64_t array_lba = ENDSWAP(header->partition_entry_lba);
     uint64_t array_blocks = (array_size + lb_size - 1) / lb_size;
     uint64_t array_end;
@@ -859,20 +880,21 @@ static bool gpt_verify_header(const struct gpt_table_header *header,
 
     *budget -= array_size;
 
-    return gpt_entry_array_crc(array_loc, array_size, &crc)
-        && crc == ENDSWAP(header->partition_entry_array_crc32);
+    return gpt_entry_array_crc(array_loc, array_size, &crc) &&
+           crc == ENDSWAP(header->partition_entry_array_crc32);
 }
 
 // Probed rather than read from AlternateLBA, because a header that failed its
 // own CRC cannot be trusted to say where its alternate lives.
-// The last byte, not the first: a medium ending mid-block carries no such block,
-// and the loader counts blocks by dividing the medium rather than by probing.
+// The last byte, not the first: a medium ending mid-block carries no such
+// block, and the loader counts blocks by dividing the medium rather than by
+// probing.
 static bool device_block_present(uint64_t block, uint64_t lb_size) {
     uint8_t probe;
     uint64_t loc;
 
-    if (mul_u64_overflow(block, lb_size, &loc)
-     || add_u64_overflow(loc, lb_size - 1, &loc)) {
+    if (mul_u64_overflow(block, lb_size, &loc) ||
+        add_u64_overflow(loc, lb_size - 1, &loc)) {
         return false;
     }
 
@@ -935,16 +957,17 @@ static bool gpt_protective_mbr(void) {
     return false;
 }
 
-// UEFI 2.11 section 5.3.2 requires falling back to the alternate header when the
-// primary does not verify, and places it in the last block. A disk imaged onto a
-// larger one keeps its alternate where the smaller one ended, so the block the
-// primary names is tried after the last block rather than instead of it: a
-// genuine alternate at the end wins over whatever a corrupt primary points at.
+// UEFI 2.11 section 5.3.2 requires falling back to the alternate header when
+// the primary does not verify, and places it in the last block. A disk imaged
+// onto a larger one keeps its alternate where the smaller one ended, so the
+// block the primary names is tried after the last block rather than instead of
+// it: a genuine alternate at the end wins over whatever a corrupt primary
+// points at.
 static bool gpt_locate_header(struct gpt_table_header *header,
                               uint64_t *lb_size_out, uint64_t *header_lba_out) {
     // Probed, not taken from the device: the size a table was written for
     // belongs to the image. 2048 is optical, and matches device_init().
-    uint64_t lb_guesses[] = { 512, 2048, 4096 };
+    uint64_t lb_guesses[] = {512, 2048, 4096};
     // A header that fails its array CRC has already paid for it, so the budget
     // covers the two locations the recovery rule names rather than one call.
     uint64_t budget = GPT_MAX_ARRAY_SIZE * 2;
@@ -975,10 +998,11 @@ static bool gpt_locate_header(struct gpt_table_header *header,
             // The signature is what identifies the block as a header at all,
             // so only a header that failed its CRC is followed. Without it the
             // field is not an LBA, it is whatever happens to be at offset 32.
-            // Seeking past the device is the cost: set_pos() walks in 1 GiB steps.
-            if (strncmp(header->signature, "EFI PART", 8) == 0
-             && ENDSWAP(header->alternate_lba) > 1
-             && have_last && ENDSWAP(header->alternate_lba) <= last) {
+            // Seeking past the device is the cost: set_pos() walks in 1 GiB
+            // steps.
+            if (strncmp(header->signature, "EFI PART", 8) == 0 &&
+                ENDSWAP(header->alternate_lba) > 1 && have_last &&
+                ENDSWAP(header->alternate_lba) <= last) {
                 candidates[candidate_count++] = ENDSWAP(header->alternate_lba);
             }
         }
@@ -1000,8 +1024,9 @@ static bool gpt_locate_header(struct gpt_table_header *header,
                 continue;
             }
 
-            if (device_read_raw(header, loc, sizeof(*header))
-             && gpt_verify_header(header, candidates[j], lb_size, device_blocks, &budget)) {
+            if (device_read_raw(header, loc, sizeof(*header)) &&
+                gpt_verify_header(header, candidates[j], lb_size, device_blocks,
+                                  &budget)) {
                 *lb_size_out = lb_size;
                 *header_lba_out = candidates[j];
                 return true;
@@ -1018,8 +1043,8 @@ static int bios_install(int argc, char *argv[]) {
     bool gpt2mbr_allowed = true;
     bool uninstall_mode = false;
     const uint8_t *bootloader_img = binary_limine_hdd_bin_data;
-    size_t   bootloader_file_size = sizeof(binary_limine_hdd_bin_data);
-    uint8_t  orig_mbr[70], timestamp[6];
+    size_t bootloader_file_size = sizeof(binary_limine_hdd_bin_data);
+    uint8_t orig_mbr[70], timestamp[6];
     void *empty_lba = NULL;
     const char *part_ndx = NULL;
 
@@ -1048,7 +1073,8 @@ static int bios_install(int argc, char *argv[]) {
                 fprintf(stderr, "warning: --force already set.\n");
             }
             force = true;
-        } else if (strcmp(argv[i], "--no-gpt-to-mbr-isohybrid-conversion") == 0) {
+        } else if (strcmp(argv[i], "--no-gpt-to-mbr-isohybrid-conversion") ==
+                   0) {
             gpt2mbr_allowed = false;
         } else if (strcmp(argv[i], "--uninstall") == 0) {
             if (uninstall_mode && !quiet) {
@@ -1057,15 +1083,18 @@ static int bios_install(int argc, char *argv[]) {
             uninstall_mode = true;
         } else if (strncmp(argv[i], "--uninstall-data-file=", 22) == 0) {
             if (uninstall_file != NULL && !quiet) {
-                fprintf(stderr, "warning: --uninstall-data-file already set. Overriding...\n");
+                fprintf(stderr, "warning: --uninstall-data-file already set. "
+                                "Overriding...\n");
             }
             uninstall_file = argv[i] + 22;
             if (strlen(uninstall_file) == 0) {
-                fprintf(stderr, "error: Uninstall data file has a zero-length name!\n");
+                fprintf(stderr,
+                        "error: Uninstall data file has a zero-length name!\n");
                 return EXIT_FAILURE;
             }
         } else if (device != NULL && argv[i][0] == '-') {
-            // A device path may begin with a dash where a partition index cannot.
+            // A device path may begin with a dash where a partition index
+            // cannot.
             bios_install_usage();
             return EXIT_FAILURE;
         } else {
@@ -1094,7 +1123,8 @@ static int bios_install(int argc, char *argv[]) {
 
     if (uninstall_mode) {
         if (uninstall_file == NULL) {
-            fprintf(stderr, "error: Uninstall mode set but no --uninstall-data-file=... passed.\n");
+            fprintf(stderr, "error: Uninstall mode set but no "
+                            "--uninstall-data-file=... passed.\n");
             goto uninstall_mode_cleanup;
         }
 
@@ -1126,10 +1156,13 @@ static int bios_install(int argc, char *argv[]) {
             gpt_entry_count = MAX_GPT_PARTITIONS;
         }
         if (!quiet) {
-            fprintf(stderr, "Installing to GPT. Logical block size of %" PRIu64 " bytes.\n",
+            fprintf(stderr,
+                    "Installing to GPT. Logical block size of %" PRIu64
+                    " bytes.\n",
                     lb_size);
             if (gpt_from_alternate) {
-                fprintf(stderr, "warning: Primary GPT did not verify; using the alternate header.\n");
+                fprintf(stderr, "warning: Primary GPT did not verify; using "
+                                "the alternate header.\n");
             }
         }
     }
@@ -1147,8 +1180,10 @@ static int bios_install(int argc, char *argv[]) {
         }
 
         if (!quiet) {
-            fprintf(stderr, "Detected ISOHYBRID with a GUID partition table (GPT).\n");
-            fprintf(stderr, "Converting to MBR for improved compatibility...\n");
+            fprintf(stderr,
+                    "Detected ISOHYBRID with a GUID partition table (GPT).\n");
+            fprintf(stderr,
+                    "Converting to MBR for improved compatibility...\n");
         }
 
         // Gather the (up to 4) GPT partition to convert.
@@ -1164,16 +1199,20 @@ static int bios_install(int argc, char *argv[]) {
         // The cap bounds the work, so a table declaring more entries than it
         // is one the loop below cannot examine in full: the refusals it makes
         // per entry would silently not cover the rest.
-        if (ENDSWAP(gpt_header.number_of_partition_entries) > MAX_GPT_PARTITIONS) {
+        if (ENDSWAP(gpt_header.number_of_partition_entries) >
+            MAX_GPT_PARTITIONS) {
             if (!quiet) {
-                fprintf(stderr, "GPT declares more than %d partition entries, will not convert GPT.\n",
+                fprintf(stderr,
+                        "GPT declares more than %d partition entries, will not "
+                        "convert GPT.\n",
                         MAX_GPT_PARTITIONS);
             }
             goto no_mbr_conv;
         }
 
         uint64_t part_entry_base;
-        if (mul_u64_overflow(ENDSWAP(gpt_header.partition_entry_lba), lb_size, &part_entry_base)) {
+        if (mul_u64_overflow(ENDSWAP(gpt_header.partition_entry_lba), lb_size,
+                             &part_entry_base)) {
             goto no_mbr_conv;
         }
 
@@ -1182,15 +1221,18 @@ static int bios_install(int argc, char *argv[]) {
         uint64_t conv_last_block;
         if (!device_last_block(lb_size, &conv_last_block)) {
             if (!quiet) {
-                fprintf(stderr, "Could not determine the size of the device, will not convert GPT.\n");
+                fprintf(stderr, "Could not determine the size of the device, "
+                                "will not convert GPT.\n");
             }
             goto no_mbr_conv;
         }
 
         for (int64_t i = 0; i < (int64_t)gpt_entry_count; i++) {
             struct gpt_entry gpt_entry;
-            uint64_t entry_offset = (uint64_t)i * ENDSWAP(gpt_header.size_of_partition_entry);
-            if (add_u64_overflow(part_entry_base, entry_offset, &entry_offset)) {
+            uint64_t entry_offset =
+                (uint64_t)i * ENDSWAP(gpt_header.size_of_partition_entry);
+            if (add_u64_overflow(part_entry_base, entry_offset,
+                                 &entry_offset)) {
                 goto no_mbr_conv;
             }
             device_read(&gpt_entry, entry_offset, sizeof(struct gpt_entry));
@@ -1202,7 +1244,8 @@ static int bios_install(int argc, char *argv[]) {
 
             if (part_to_conv_i == 4) {
                 if (!quiet) {
-                    fprintf(stderr, "GPT contains more than 4 partitions, will not convert.\n");
+                    fprintf(stderr, "GPT contains more than 4 partitions, will "
+                                    "not convert.\n");
                 }
                 goto no_mbr_conv;
             }
@@ -1215,7 +1258,10 @@ static int bios_install(int argc, char *argv[]) {
 
             if (end_lba < start_lba) {
                 if (!quiet) {
-                    fprintf(stderr, "Partition %" PRIi64 " ends before it starts, will not convert GPT.\n", i + 1);
+                    fprintf(stderr,
+                            "Partition %" PRIi64
+                            " ends before it starts, will not convert GPT.\n",
+                            i + 1);
                 }
                 goto no_mbr_conv;
             }
@@ -1223,48 +1269,70 @@ static int bios_install(int argc, char *argv[]) {
             // The alternate erase resumes past LastUsableLBA. At the low end
             // the primary reserve is floored at two blocks, so what keeps a
             // converted partition clear of it is the 63-sector check below.
-            if (start_lba < ENDSWAP(gpt_header.first_usable_lba)
-             || end_lba > ENDSWAP(gpt_header.last_usable_lba)) {
+            if (start_lba < ENDSWAP(gpt_header.first_usable_lba) ||
+                end_lba > ENDSWAP(gpt_header.last_usable_lba)) {
                 if (!quiet) {
-                    fprintf(stderr, "Partition %" PRIi64 " lies outside the GPT usable range, will not convert GPT.\n", i + 1);
+                    fprintf(stderr,
+                            "Partition %" PRIi64
+                            " lies outside the GPT usable range, will not "
+                            "convert GPT.\n",
+                            i + 1);
                 }
                 goto no_mbr_conv;
             }
 
             if (end_lba > conv_last_block) {
                 if (!quiet) {
-                    fprintf(stderr, "Partition %" PRIi64 " ends past the device, will not convert GPT.\n", i + 1);
+                    fprintf(stderr,
+                            "Partition %" PRIi64
+                            " ends past the device, will not convert GPT.\n",
+                            i + 1);
                 }
                 goto no_mbr_conv;
             }
 
-            if (mul_u64_overflow(start_lba, lb_size / 512, &start_sect)
-             || start_sect > UINT32_MAX) {
+            if (mul_u64_overflow(start_lba, lb_size / 512, &start_sect) ||
+                start_sect > UINT32_MAX) {
                 if (!quiet) {
-                    fprintf(stderr, "Starting LBA of partition %" PRIi64 " is greater than UINT32_MAX, will not convert GPT.\n", i + 1);
+                    fprintf(
+                        stderr,
+                        "Starting LBA of partition %" PRIi64
+                        " is greater than UINT32_MAX, will not convert GPT.\n",
+                        i + 1);
                 }
                 goto no_mbr_conv;
             }
 
-            if (mul_u64_overflow(end_lba - start_lba + 1, lb_size / 512, &sect_count)
-             || sect_count > UINT32_MAX
-             || start_sect + sect_count - 1 > UINT32_MAX) {
+            if (mul_u64_overflow(end_lba - start_lba + 1, lb_size / 512,
+                                 &sect_count) ||
+                sect_count > UINT32_MAX ||
+                start_sect + sect_count - 1 > UINT32_MAX) {
                 if (!quiet) {
-                    fprintf(stderr, "Sector count of partition %" PRIi64 " is greater than UINT32_MAX, will not convert GPT.\n", i + 1);
+                    fprintf(
+                        stderr,
+                        "Sector count of partition %" PRIi64
+                        " is greater than UINT32_MAX, will not convert GPT.\n",
+                        i + 1);
                 }
                 goto no_mbr_conv;
             }
 
             part_to_conv[part_to_conv_i].lba_start = start_sect;
             part_to_conv[part_to_conv_i].lba_end = start_sect + sect_count - 1;
-            lba2chs(part_to_conv[part_to_conv_i].chs_start, part_to_conv[part_to_conv_i].lba_start);
-            lba2chs(part_to_conv[part_to_conv_i].chs_end, part_to_conv[part_to_conv_i].lba_end);
+            lba2chs(part_to_conv[part_to_conv_i].chs_start,
+                    part_to_conv[part_to_conv_i].lba_start);
+            lba2chs(part_to_conv[part_to_conv_i].chs_end,
+                    part_to_conv[part_to_conv_i].lba_end);
 
             int type = gpt2mbr_type(ENDSWAP(gpt_entry.partition_type_guid[0]),
                                     ENDSWAP(gpt_entry.partition_type_guid[1]));
             if (type == -1) {
                 if (!quiet) {
-                    fprintf(stderr, "Cannot convert partition type for partition %" PRIi64 ", will not convert GPT.\n", i + 1);
+                    fprintf(
+                        stderr,
+                        "Cannot convert partition type for partition %" PRIi64
+                        ", will not convert GPT.\n",
+                        i + 1);
                 }
                 goto no_mbr_conv;
             }
@@ -1309,8 +1377,9 @@ static int bios_install(int argc, char *argv[]) {
             alternates[alternate_count++] = ENDSWAP(gpt_header.alternate_lba);
         }
 
-        if (device_last_block(lb_size, &last_block) && last_block >= alt_reserve
-         && (alternate_count == 0 || alternates[0] != last_block)) {
+        if (device_last_block(lb_size, &last_block) &&
+            last_block >= alt_reserve &&
+            (alternate_count == 0 || alternates[0] != last_block)) {
             alternates[alternate_count++] = last_block;
         }
 
@@ -1323,9 +1392,9 @@ static int bios_install(int argc, char *argv[]) {
             // Checked by signature alone rather than by gpt_verify_header,
             // deliberately: a wrong AlternateLBA reaches nothing, and a table
             // this tool rejects may still be honoured by another reader.
-            if (mul_u64_overflow(alternates[ai], lb_size, &probe_loc)
-             || !device_read_raw(&probe, probe_loc, sizeof(probe))
-             || strncmp(probe.signature, "EFI PART", 8) != 0) {
+            if (mul_u64_overflow(alternates[ai], lb_size, &probe_loc) ||
+                !device_read_raw(&probe, probe_loc, sizeof(probe)) ||
+                strncmp(probe.signature, "EFI PART", 8) != 0) {
                 continue;
             }
 
@@ -1357,7 +1426,8 @@ static int bios_install(int argc, char *argv[]) {
         // the two blocks a GPT-aware reader consults whatever the header says.
         uint64_t first_usable = ENDSWAP(gpt_header.first_usable_lba);
         uint64_t reserve_max = 2 + (16384 + lb_size - 1) / lb_size;
-        uint64_t reserve = first_usable < reserve_max ? first_usable : reserve_max;
+        uint64_t reserve =
+            first_usable < reserve_max ? first_usable : reserve_max;
         if (reserve < 2) {
             reserve = 2;
         }
@@ -1370,7 +1440,9 @@ static int bios_install(int argc, char *argv[]) {
             for (uint64_t lba = alt_first[ai]; lba <= alternates[ai]; lba++) {
                 uint64_t wipe_loc;
                 if (mul_u64_overflow(lba, lb_size, &wipe_loc)) {
-                    fprintf(stderr, "error: GPT alternate LBA out of range, aborting.\n");
+                    fprintf(
+                        stderr,
+                        "error: GPT alternate LBA out of range, aborting.\n");
                     goto cleanup;
                 }
                 device_write(empty_lba, wipe_loc, lb_size);
@@ -1401,7 +1473,10 @@ static int bios_install(int argc, char *argv[]) {
             device_write(&part_to_conv[i].type, 0x1be + i * 16 + 0x04, 1);
             uint32_t lba_start = ENDSWAP((uint32_t)part_to_conv[i].lba_start);
             device_write(&lba_start, 0x1be + i * 16 + 0x08, 4);
-            uint32_t sect_count = ENDSWAP((uint32_t)((part_to_conv[i].lba_end - part_to_conv[i].lba_start) + 1));
+            uint32_t sect_count =
+                ENDSWAP((uint32_t)((part_to_conv[i].lba_end -
+                                    part_to_conv[i].lba_start) +
+                                   1));
             device_write(&sect_count, 0x1be + i * 16 + 0x0c, 4);
 
             device_write(part_to_conv[i].chs_start, 0x1be + i * 16 + 1, 3);
@@ -1517,8 +1592,9 @@ no_mbr_conv:;
         }
 
         if (0) {
-part_too_low:
-            fprintf(stderr, "error: A partition's start sector is less than 63, aborting.\n");
+        part_too_low:
+            fprintf(stderr, "error: A partition's start sector is less than "
+                            "63, aborting.\n");
             goto cleanup;
         }
 
@@ -1532,8 +1608,11 @@ part_too_low:
 
         if (mbr && !any_active) {
             if (!quiet) {
-                fprintf(stderr, "No active partition found, some systems may not boot.\n");
-                fprintf(stderr, "Setting partition 1 as active to work around the issue...\n");
+                fprintf(
+                    stderr,
+                    "No active partition found, some systems may not boot.\n");
+                fprintf(stderr, "Setting partition 1 as active to work around "
+                                "the issue...\n");
             }
             hint8 = 0x80;
             device_write(&hint8, 446, sizeof(uint8_t));
@@ -1541,10 +1620,16 @@ part_too_low:
     }
 
     if (gpt == 0 && mbr == 0) {
-        fprintf(stderr, "error: Could not determine if the device has a valid partition table.\n");
-        fprintf(stderr, "       Please ensure the device has a valid MBR or GPT.\n");
-        fprintf(stderr, "       Alternatively, pass `--force` to override these checks.\n");
-        fprintf(stderr, "       **ONLY DO THIS AT YOUR OWN RISK, DATA LOSS MAY OCCUR!**\n");
+        fprintf(stderr, "error: Could not determine if the device has a valid "
+                        "partition table.\n");
+        fprintf(stderr,
+                "       Please ensure the device has a valid MBR or GPT.\n");
+        fprintf(
+            stderr,
+            "       Alternatively, pass `--force` to override these checks.\n");
+        fprintf(
+            stderr,
+            "       **ONLY DO THIS AT YOUR OWN RISK, DATA LOSS MAY OCCUR!**\n");
         goto cleanup;
     }
 
@@ -1563,7 +1648,8 @@ part_too_low:
         uint32_t partition_num;
 
         uint64_t gpt_part_entry_base;
-        if (mul_u64_overflow(ENDSWAP(gpt_header.partition_entry_lba), lb_size, &gpt_part_entry_base)) {
+        if (mul_u64_overflow(ENDSWAP(gpt_header.partition_entry_lba), lb_size,
+                             &gpt_part_entry_base)) {
             fprintf(stderr, "error: GPT partition entry LBA overflows.\n");
             goto cleanup;
         }
@@ -1571,10 +1657,13 @@ part_too_low:
         if (part_ndx != NULL) {
             char *part_ndx_end;
             unsigned long part_ndx_val = strtoul(part_ndx, &part_ndx_end, 10);
-            if (part_ndx[0] < '0' || part_ndx[0] > '9' || *part_ndx_end != '\0'
-             || part_ndx_val == 0 || part_ndx_val > UINT32_MAX) {
-                fprintf(stderr, "error: Invalid partition number `%s`: expected a whole"
-                                " number starting at 1.\n", part_ndx);
+            if (part_ndx[0] < '0' || part_ndx[0] > '9' ||
+                *part_ndx_end != '\0' || part_ndx_val == 0 ||
+                part_ndx_val > UINT32_MAX) {
+                fprintf(stderr,
+                        "error: Invalid partition number `%s`: expected a whole"
+                        " number starting at 1.\n",
+                        part_ndx);
                 goto cleanup;
             }
             partition_num = (uint32_t)part_ndx_val - 1;
@@ -1583,67 +1672,93 @@ part_too_low:
                 goto cleanup;
             }
 
-            uint64_t entry_off = (uint64_t)partition_num * ENDSWAP(gpt_header.size_of_partition_entry);
+            uint64_t entry_off = (uint64_t)partition_num *
+                                 ENDSWAP(gpt_header.size_of_partition_entry);
             if (add_u64_overflow(gpt_part_entry_base, entry_off, &entry_off)) {
-                fprintf(stderr, "error: GPT partition entry offset overflows.\n");
+                fprintf(stderr,
+                        "error: GPT partition entry offset overflows.\n");
                 goto cleanup;
             }
             device_read(&gpt_entry, entry_off, sizeof(struct gpt_entry));
 
             if (gpt_entry.partition_type_guid[0] == 0 &&
-              gpt_entry.partition_type_guid[1] == 0) {
-                fprintf(stderr, "error: No such partition: %" PRIu32 ".\n", partition_num + 1);
+                gpt_entry.partition_type_guid[1] == 0) {
+                fprintf(stderr, "error: No such partition: %" PRIu32 ".\n",
+                        partition_num + 1);
                 goto cleanup;
             }
 
-            if (!force && memcmp("Hah!IdontNeedEFI", &gpt_entry.partition_type_guid, 16) != 0) {
-                fprintf(stderr, "error: Chosen partition for BIOS boot code is not of BIOS boot partition type.\n");
-                fprintf(stderr, "       Pass `--force` to override this check.\n");
-                fprintf(stderr, "       **ONLY DO THIS AT YOUR OWN RISK, DATA LOSS MAY OCCUR!**\n");
+            if (!force && memcmp("Hah!IdontNeedEFI",
+                                 &gpt_entry.partition_type_guid, 16) != 0) {
+                fprintf(stderr, "error: Chosen partition for BIOS boot code is "
+                                "not of BIOS boot partition type.\n");
+                fprintf(stderr,
+                        "       Pass `--force` to override this check.\n");
+                fprintf(stderr, "       **ONLY DO THIS AT YOUR OWN RISK, DATA "
+                                "LOSS MAY OCCUR!**\n");
                 goto cleanup;
             }
         } else {
             // Try to autodetect the BIOS boot partition
-            for (partition_num = 0; partition_num < gpt_entry_count; partition_num++) {
-                uint64_t entry_off = (uint64_t)partition_num * ENDSWAP(gpt_header.size_of_partition_entry);
-                if (add_u64_overflow(gpt_part_entry_base, entry_off, &entry_off)) {
-                    fprintf(stderr, "error: GPT partition entry offset overflows.\n");
+            for (partition_num = 0; partition_num < gpt_entry_count;
+                 partition_num++) {
+                uint64_t entry_off =
+                    (uint64_t)partition_num *
+                    ENDSWAP(gpt_header.size_of_partition_entry);
+                if (add_u64_overflow(gpt_part_entry_base, entry_off,
+                                     &entry_off)) {
+                    fprintf(stderr,
+                            "error: GPT partition entry offset overflows.\n");
                     goto cleanup;
                 }
                 device_read(&gpt_entry, entry_off, sizeof(struct gpt_entry));
 
-                if (memcmp("Hah!IdontNeedEFI", &gpt_entry.partition_type_guid, 16) == 0) {
+                if (memcmp("Hah!IdontNeedEFI", &gpt_entry.partition_type_guid,
+                           16) == 0) {
                     if (!quiet) {
-                        fprintf(stderr, "Autodetected partition %" PRIu32 " as BIOS boot partition.\n", partition_num + 1);
+                        fprintf(stderr,
+                                "Autodetected partition %" PRIu32
+                                " as BIOS boot partition.\n",
+                                partition_num + 1);
                     }
                     goto bios_boot_autodetected;
                 }
             }
 
-            fprintf(stderr, "error: Installing to a GPT device, but no BIOS boot partition specified or\n");
+            fprintf(stderr, "error: Installing to a GPT device, but no BIOS "
+                            "boot partition specified or\n");
             fprintf(stderr, "       detected.\n");
             goto cleanup;
         }
 
-bios_boot_autodetected:;
+    bios_boot_autodetected:;
         uint64_t starting_lba = ENDSWAP(gpt_entry.starting_lba);
         uint64_t ending_lba = ENDSWAP(gpt_entry.ending_lba);
 
         if (ending_lba < starting_lba) {
-            fprintf(stderr, "error: Partition %" PRIu32 " has ending LBA less than starting LBA.\n", partition_num + 1);
+            fprintf(stderr,
+                    "error: Partition %" PRIu32
+                    " has ending LBA less than starting LBA.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
         // The usable range is the header's own, so a crafted one moves it; the
         // reserve UEFI states is the floor it cannot move.
         if (starting_lba < 2 + (16384 + lb_size - 1) / lb_size) {
-            fprintf(stderr, "error: Partition %" PRIu32 " starts inside the GPT reserve.\n", partition_num + 1);
+            fprintf(stderr,
+                    "error: Partition %" PRIu32
+                    " starts inside the GPT reserve.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
-        if (starting_lba < ENDSWAP(gpt_header.first_usable_lba)
-         || ending_lba > ENDSWAP(gpt_header.last_usable_lba)) {
-            fprintf(stderr, "error: Partition %" PRIu32 " lies outside the GPT usable range.\n", partition_num + 1);
+        if (starting_lba < ENDSWAP(gpt_header.first_usable_lba) ||
+            ending_lba > ENDSWAP(gpt_header.last_usable_lba)) {
+            fprintf(stderr,
+                    "error: Partition %" PRIu32
+                    " lies outside the GPT usable range.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
@@ -1651,13 +1766,17 @@ bios_boot_autodetected:;
         // at the start, and no header can move where the medium ends.
         uint64_t last_block;
         if (!device_last_block(lb_size, &last_block)) {
-            fprintf(stderr, "error: Could not determine the size of the device.\n");
+            fprintf(stderr,
+                    "error: Could not determine the size of the device.\n");
             goto cleanup;
         }
         uint64_t end_reserve = (16384 + lb_size - 1) / lb_size;
-        if (last_block < 1 + end_reserve
-         || ending_lba > last_block - 1 - end_reserve) {
-            fprintf(stderr, "error: Partition %" PRIu32 " ends inside the alternate GPT.\n", partition_num + 1);
+        if (last_block < 1 + end_reserve ||
+            ending_lba > last_block - 1 - end_reserve) {
+            fprintf(stderr,
+                    "error: Partition %" PRIu32
+                    " ends inside the alternate GPT.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
@@ -1665,7 +1784,8 @@ bios_boot_autodetected:;
         // rather than against its neighbours, and the usable range is where
         // all of them live. UEFI requires that they not overlap. The count is
         // the table's own: gpt_entry_count caps enumeration, not the disk.
-        uint32_t declared_entries = ENDSWAP(gpt_header.number_of_partition_entries);
+        uint32_t declared_entries =
+            ENDSWAP(gpt_header.number_of_partition_entries);
         for (uint32_t i = 0; i < declared_entries; i++) {
             struct gpt_entry other;
             uint64_t other_off;
@@ -1674,39 +1794,49 @@ bios_boot_autodetected:;
                 continue;
             }
 
-            other_off = (uint64_t)i * ENDSWAP(gpt_header.size_of_partition_entry);
+            other_off =
+                (uint64_t)i * ENDSWAP(gpt_header.size_of_partition_entry);
             if (add_u64_overflow(gpt_part_entry_base, other_off, &other_off)) {
-                fprintf(stderr, "error: GPT partition entry offset overflows.\n");
+                fprintf(stderr,
+                        "error: GPT partition entry offset overflows.\n");
                 goto cleanup;
             }
             device_read(&other, other_off, sizeof(struct gpt_entry));
 
-            if (other.partition_type_guid[0] == 0
-             && other.partition_type_guid[1] == 0) {
+            if (other.partition_type_guid[0] == 0 &&
+                other.partition_type_guid[1] == 0) {
                 continue;
             }
 
-            if (starting_lba <= ENDSWAP(other.ending_lba)
-             && ENDSWAP(other.starting_lba) <= ending_lba) {
-                fprintf(stderr, "error: Partition %" PRIu32 " overlaps partition %" PRIu32 ".\n",
+            if (starting_lba <= ENDSWAP(other.ending_lba) &&
+                ENDSWAP(other.starting_lba) <= ending_lba) {
+                fprintf(stderr,
+                        "error: Partition %" PRIu32
+                        " overlaps partition %" PRIu32 ".\n",
                         partition_num + 1, i + 1);
                 goto cleanup;
             }
         }
 
         uint64_t part_size;
-        if (mul_u64_overflow(ending_lba - starting_lba + 1, lb_size, &part_size)) {
-            fprintf(stderr, "error: Partition %" PRIu32 " size overflows.\n", partition_num + 1);
+        if (mul_u64_overflow(ending_lba - starting_lba + 1, lb_size,
+                             &part_size)) {
+            fprintf(stderr, "error: Partition %" PRIu32 " size overflows.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
         if (part_size < 32768) {
-            fprintf(stderr, "error: Partition %" PRIu32 " is smaller than 32KiB.\n", partition_num + 1);
+            fprintf(stderr,
+                    "error: Partition %" PRIu32 " is smaller than 32KiB.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
         if (mul_u64_overflow(starting_lba, lb_size, &stage2_loc)) {
-            fprintf(stderr, "error: Partition %" PRIu32 " starting LBA overflows.\n", partition_num + 1);
+            fprintf(stderr,
+                    "error: Partition %" PRIu32 " starting LBA overflows.\n",
+                    partition_num + 1);
             goto cleanup;
         }
 
@@ -1719,15 +1849,20 @@ bios_boot_autodetected:;
         }
 
         if (!valid) {
-            fprintf(stderr, "error: The partition selected to install the BIOS boot code to contains\n");
+            fprintf(stderr, "error: The partition selected to install the BIOS "
+                            "boot code to contains\n");
             fprintf(stderr, "       a recognised filesystem.\n");
-            fprintf(stderr, "       Pass `--force` to override these checks.\n");
-            fprintf(stderr, "       **ONLY DO THIS AT YOUR OWN RISK, DATA LOSS MAY OCCUR!**\n");
+            fprintf(stderr,
+                    "       Pass `--force` to override these checks.\n");
+            fprintf(stderr, "       **ONLY DO THIS AT YOUR OWN RISK, DATA LOSS "
+                            "MAY OCCUR!**\n");
             goto cleanup;
         }
 
         if (!quiet) {
-            fprintf(stderr, "Installing BIOS boot code to partition %" PRIu32 ".\n", partition_num + 1);
+            fprintf(stderr,
+                    "Installing BIOS boot code to partition %" PRIu32 ".\n",
+                    partition_num + 1);
         }
     } else {
         if (!quiet) {
@@ -1736,7 +1871,8 @@ bios_boot_autodetected:;
     }
 
     if (!quiet) {
-        fprintf(stderr, "Stage 2 to be located at byte offset 0x%" PRIx64 ".\n", stage2_loc);
+        fprintf(stderr, "Stage 2 to be located at byte offset 0x%" PRIx64 ".\n",
+                stage2_loc);
     }
 
     // Save original timestamp
@@ -1746,9 +1882,13 @@ bios_boot_autodetected:;
     device_read(orig_mbr, 440, 70);
 
     if ((uint64_t)bootloader_file_size - 512 > stage2_max) {
-        fprintf(stderr, "error: Stage 2 needs %" PRIu64 " bytes at offset 0x%" PRIx64 ", but only\n",
+        fprintf(stderr,
+                "error: Stage 2 needs %" PRIu64 " bytes at offset 0x%" PRIx64
+                ", but only\n",
                 (uint64_t)bootloader_file_size - 512, stage2_loc);
-        fprintf(stderr, "       %" PRIu64 " are available before the next thing on the device.\n",
+        fprintf(stderr,
+                "       %" PRIu64
+                " are available before the next thing on the device.\n",
                 stage2_max);
         goto cleanup;
     }
@@ -1778,8 +1918,8 @@ cleanup:
     reverse_uninstall_data();
     // An install whose uninstall data could not be saved is undone too: a
     // rerun would record the installed sectors as the originals.
-    if (ok == EXIT_SUCCESS && uninstall_file != NULL
-     && !store_uninstall_data(uninstall_file)) {
+    if (ok == EXIT_SUCCESS && uninstall_file != NULL &&
+        !store_uninstall_data(uninstall_file)) {
         ok = EXIT_FAILURE;
     }
     if (ok != EXIT_SUCCESS) {
@@ -1787,9 +1927,13 @@ cleanup:
         fprintf(stderr, "Install failed, undoing work...\n");
         uninstall(true);
     } else if (!quiet) {
-        fprintf(stderr, "Reminder: Remember to copy the limine-bios.sys file in either\n"
-                        "          the root, /boot, /limine, or /boot/limine directories of\n"
-                        "          one of the partitions on the device, or boot will fail!\n");
+        fprintf(
+            stderr,
+            "Reminder: Remember to copy the limine-bios.sys file in either\n"
+            "          the root, /boot, /limine, or /boot/limine directories "
+            "of\n"
+            "          one of the partitions on the device, or boot will "
+            "fail!\n");
 
         fprintf(stderr, "Limine BIOS stages installed successfully.\n");
     }
@@ -1813,9 +1957,12 @@ uninstall_mode_cleanup:
 #define CONFIG_B2SUM_SIGNATURE "++CONFIG_B2SUM_SIGNATURE++"
 
 static void enroll_config_usage(void) {
-    printf("usage: %s enroll-config <Limine executable> <BLAKE2B of config file>\n", program_name);
+    printf("usage: %s enroll-config <Limine executable> <BLAKE2B of config "
+           "file>\n",
+           program_name);
     printf("\n");
-    printf("    --reset      Remove enrolled BLAKE2B, will not check config integrity\n");
+    printf("    --reset      Remove enrolled BLAKE2B, will not check config "
+           "integrity\n");
     printf("\n");
     printf("    --quiet      Do not print verbose diagnostic messages\n");
     printf("\n");
@@ -1865,13 +2012,16 @@ static int enroll_config(int argc, char *argv[]) {
 
     if (!reset) {
         if (strlen(argv[2]) != 128) {
-            fprintf(stderr, "error: BLAKE2B specified is not 128 characters long.\n");
+            fprintf(stderr,
+                    "error: BLAKE2B specified is not 128 characters long.\n");
             goto cleanup;
         }
         for (size_t i = 0; i < 128; i++) {
             char c = argv[2][i];
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-                fprintf(stderr, "error: BLAKE2B specified contains a non-hexadecimal character.\n");
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                  (c >= 'A' && c <= 'F'))) {
+                fprintf(stderr, "error: BLAKE2B specified contains a "
+                                "non-hexadecimal character.\n");
                 goto cleanup;
             }
         }
@@ -1897,7 +2047,9 @@ static int enroll_config(int argc, char *argv[]) {
 
     size_t min_size = (sizeof(CONFIG_B2SUM_SIGNATURE) - 1) + 128;
     if (bootloader_size < min_size) {
-        fprintf(stderr, "error: Bootloader file too small (need at least %zu bytes)\n", min_size);
+        fprintf(stderr,
+                "error: Bootloader file too small (need at least %zu bytes)\n",
+                min_size);
         goto cleanup;
     }
 
@@ -1933,7 +2085,8 @@ static int enroll_config(int argc, char *argv[]) {
     }
 
     if (checksum_loc == NULL) {
-        fprintf(stderr, "error: Checksum location not found in provided executable.\n");
+        fprintf(stderr,
+                "error: Checksum location not found in provided executable.\n");
         goto cleanup;
     }
 
@@ -1957,7 +2110,8 @@ static int enroll_config(int argc, char *argv[]) {
     }
 
     if (!quiet_arg) {
-        fprintf(stderr, "Config file BLAKE2B successfully %s.\n", reset ? "reset" : "enrolled");
+        fprintf(stderr, "Config file BLAKE2B successfully %s.\n",
+                reset ? "reset" : "enrolled");
     }
     ret = EXIT_SUCCESS;
 
@@ -1980,7 +2134,8 @@ cleanup:
 static void version_usage(void) {
     printf("usage: %s version [options...]\n", program_name);
     printf("\n");
-    printf("    --version-only  Only print the version number without licensing info\n");
+    printf("    --version-only  Only print the version number without "
+           "licensing info\n");
     printf("                    and other distractions\n");
     printf("\n");
     printf("    --help | -h     Display this help message\n");
@@ -2017,14 +2172,17 @@ static int version(int argc, char *argv[]) {
 static void general_usage(void) {
     printf("usage: %s <command> <args...>\n", program_name);
     printf("\n");
-    printf("    --print-datadir   Print the directory containing the bootloader files\n");
+    printf("    --print-datadir   Print the directory containing the "
+           "bootloader files\n");
     printf("\n");
-    printf("    --version         Print the Limine version (like the `version` command)\n");
+    printf("    --version         Print the Limine version (like the `version` "
+           "command)\n");
     printf("\n");
     printf("    --help | -h       Display this help message\n");
     printf("\n");
     printf("Commands: `help`, `version`, `bios-install`, `enroll-config`\n");
-    printf("Use `--help` after specifying the command for command-specific help.\n");
+    printf("Use `--help` after specifying the command for command-specific "
+           "help.\n");
 }
 
 static int print_datadir(void) {
@@ -2032,7 +2190,8 @@ static int print_datadir(void) {
     puts(LIMINE_DATADIR);
     return EXIT_SUCCESS;
 #else
-    fprintf(stderr, "error: Cannot print datadir for `limine` built standalone.\n");
+    fprintf(stderr,
+            "error: Cannot print datadir for `limine` built standalone.\n");
     return EXIT_FAILURE;
 #endif
 }
@@ -2045,24 +2204,24 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if (strcmp(argv[1], "help") == 0
-     || strcmp(argv[1], "--help") == 0
-     || strcmp(argv[1], "-h") == 0) {
+    if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0 ||
+        strcmp(argv[1], "-h") == 0) {
         general_usage();
         return EXIT_SUCCESS;
     } else if (strcmp(argv[1], "bios-install") == 0) {
 #ifndef LIMINE_NO_BIOS
         return bios_install(argc - 1, &argv[1]);
 #else
-        fprintf(stderr, "error: Limine has been compiled without BIOS support.\n");
+        fprintf(stderr,
+                "error: Limine has been compiled without BIOS support.\n");
         return EXIT_FAILURE;
 #endif
     } else if (strcmp(argv[1], "enroll-config") == 0) {
         return enroll_config(argc - 1, &argv[1]);
     } else if (strcmp(argv[1], "--print-datadir") == 0) {
         return print_datadir();
-    } else if (strcmp(argv[1], "version") == 0
-            || strcmp(argv[1], "--version") == 0) {
+    } else if (strcmp(argv[1], "version") == 0 ||
+               strcmp(argv[1], "--version") == 0) {
         return version(argc - 1, &argv[1]);
     }
 
