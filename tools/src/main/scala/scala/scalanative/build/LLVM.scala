@@ -221,6 +221,12 @@ private[scalanative] object LLVM {
       analysis: ReachabilityAnalysis.Result
   )(implicit config: Config) = {
     val workDir = config.workDir
+    // Exclude all GC related objects
+    val objects = objectsPaths.filter { obj =>
+      val path = obj.toString.replace('\\', '/')
+      val gcDirs = Seq("none", "immix", "commix", "boehm", "experimental")
+      gcDirs.find(dir => path.contains(s"/gc/$dir/")).isEmpty
+    }
     val links = {
       val srclinks = analysis.links.map(_.name)
       val gclinks = config.gc.links
@@ -246,8 +252,10 @@ private[scalanative] object LLVM {
     val asNeededLinkerFlags =
       if (config.targetsWindows || config.targetsMac) Nil
       else List("-Wl,--as-needed")
-    val linkopts =
-      asNeededLinkerFlags ++ config.linkingOptions ++ links.map("-l" + _)
+    val linkopts = {
+      // do not link against platform libs
+      asNeededLinkerFlags ++ config.linkingOptions
+    }
 
     val debugFlags =
       if (config.targetsWindows) List("-g")
@@ -318,7 +326,7 @@ private[scalanative] object LLVM {
         // them like they were in a .a library and links all symbols
         // regardless of ordering
         if (useLdd) add("-Wl,--start-lib")
-        objectsPaths.foreach(p => add(p.abs))
+        objects.foreach(p => add(p.abs))
         if (useLdd) add("-Wl,--end-lib")
 
         linkopts.foreach(add)
