@@ -19,7 +19,7 @@ kernel_main:
 
     movl %eax, %ebx
 
-    cmpl $42, %ebx
+    cmpl $43, %ebx
     jne .bad
 
     movl %ebx, %edi

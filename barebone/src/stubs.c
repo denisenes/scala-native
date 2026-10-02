@@ -1,9 +1,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define STUB(name) \
+#define STUB(name)                                                             \
     uintptr_t name(void) { return 0; }
-
 
 /* ---------- libc / POSIX ---------- */
 
@@ -31,7 +30,6 @@ STUB(strncmp)
 STUB(strncpy)
 STUB(strrchr)
 STUB(write)
-
 
 /* ---------- Scala Native runtime ---------- */
 
@@ -133,11 +131,8 @@ STUB(scalanative_unwind_sizeof_cursor)
 STUB(scalanative_unwind_step)
 STUB(scalanative_unw_reg_ip)
 
-
 /* ---------- Globals ---------- */
 
 char **environ = NULL;
-
-
 
 const char *snFatalErrorPrefix = NULL;
