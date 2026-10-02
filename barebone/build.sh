@@ -6,8 +6,7 @@ OS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$OS_DIR")"
 SRC_DIR="$OS_DIR/src"
 BUILD_DIR="$OS_DIR/build"
-LIMINE_DIR="$SRC_DIR/limine-binary"
-KERNEL_SCALA="$REPO_DIR/sandbox/src/main/scala/Kernel.scala"
+LIMINE_DIR="$SRC_DIR/boot/limine-binary"
 FONT_ARCHIVE="$OS_DIR/assets/Uni3-Terminus16.psf.gz"
 
 # Scala Native build output of the sandbox project (sandbox3, Scala 3.9.0).
@@ -45,16 +44,15 @@ done
 #    `sbt clean` is run first so the codegen always regenerates the objects.
 # ---------------------------------------------------------------------------
 if [[ "$WITH_SBT" == 1 ]]; then
-    if [[ ! -f "$KERNEL_SCALA" ]]; then
-        echo "Error: Scala kernel source not found: $KERNEL_SCALA" >&2
-        exit 1
-    fi
-
     echo "=== Compiling Scala sandbox (sbt clean && sbt sandbox3/run) ==="
     (cd "$REPO_DIR" && sbt clean)
+    # Include scala kernel part into sandbox compilation set 
+    cp -r "$SRC_DIR/kernel/scala" "$REPO_DIR/sandbox/src/main/scala/kernel"
+    # Build all
     if ! (cd "$REPO_DIR" && sbt sandbox3/run); then
         echo "sbt sandbox3/run failed (expected: linking is intentionally broken), continuing"
     fi
+    rm -r "$REPO_DIR/sandbox/src/main/scala/kernel"
 fi
 
 shopt -s nullglob
@@ -96,15 +94,25 @@ objdump -d -r megaobj.o > megaobj.asm
 # Build the host utility in build, keeping the dependency sources untouched.
 echo "=== Building limine-binary ==="
 mkdir -p "$BUILD_DIR/limine-binary"
-cp "$LIMINE_DIR/Makefile" "$LIMINE_DIR/limine.c" \
-    "$LIMINE_DIR/limine-bios-hdd.h" "$BUILD_DIR/limine-binary/"
+cp "$LIMINE_DIR/Makefile" "$LIMINE_DIR/limine.c" "$LIMINE_DIR/limine-bios-hdd.h" "$BUILD_DIR/limine-binary/"
 make -C "$BUILD_DIR/limine-binary"
 
-# 3. Compile the C platform bridge used by Kernel.scala.
+echo "=== Compile entry.s ==="
+clang \
+    --target=x86_64-unknown-none-elf \
+    -c "$SRC_DIR/kernel/asm/entry.S" \
+    -o entry.o \
+    -ffreestanding \
+    -fno-pic \
+    -m64 \
+    -mno-red-zone \
+    -mcmodel=kernel
+
 echo "=== Compile platfrom.c ==="
 clang \
     --target=x86_64-unknown-none-elf \
-    -c "$SRC_DIR/platform.c" \
+    -I "$SRC_DIR/boot/" \
+    -c "$SRC_DIR/kernel/c/platform.c" \
     -o platform.o \
     -std=gnu11 \
     -ffreestanding \
@@ -120,23 +128,10 @@ clang \
     -Wall \
     -Wextra
 
-# 4. Compile the kernel entry point.
-echo "=== Compile entry.s ==="
-clang \
-    --target=x86_64-unknown-none-elf \
-    -c "$SRC_DIR/entry.S" \
-    -o entry.o \
-    -ffreestanding \
-    -fno-pic \
-    -m64 \
-    -mno-red-zone \
-    -mcmodel=kernel
-
-# 5. Compile the Scala Native runtime stubs.
 echo "=== Compile stubs.c ==="
 clang \
     --target=x86_64-unknown-none-elf \
-    -c "$SRC_DIR/stubs.c" \
+    -c "$SRC_DIR/kernel/c/stubs.c" \
     -o stubs.o \
     -ffreestanding \
     -fno-builtin \
@@ -147,7 +142,6 @@ clang \
     -mcmodel=kernel \
     -O2
 
-# 6. Link the entry point, platform bridge, and Scala Native objects.
 echo "=== Linking... ==="
 ld.lld \
     -m elf_x86_64 \
@@ -162,7 +156,6 @@ ld.lld \
     megaobj.o \
     -o myos
 
-# Optional sanity checks
 echo "=== Undefined symbols ==="
 nm -u myos || true
 
@@ -172,16 +165,14 @@ nm myos | grep kmain || true
 echo "=== kernel_main ==="
 nm myos | grep kernel_main || true
 
-# 5. Prepare the ISO tree from sources and the Limine distribution.
 mkdir -p iso_root/boot/limine iso_root/EFI/BOOT
 cp myos iso_root/boot/myos
-cp "$SRC_DIR/limine.conf" iso_root/boot/limine/limine.conf
+cp "$SRC_DIR/boot/limine.conf" iso_root/boot/limine/limine.conf
 cp "$LIMINE_DIR/limine-bios.sys" \
     "$LIMINE_DIR/limine-bios-cd.bin" \
     "$LIMINE_DIR/limine-uefi-cd.bin" iso_root/boot/limine/
 cp "$LIMINE_DIR/BOOTX64.EFI" iso_root/EFI/BOOT/BOOTX64.EFI
 
-# 6. Build ISO
 xorriso -as mkisofs \
     -R -r -J \
     -b boot/limine/limine-bios-cd.bin \
@@ -197,10 +188,8 @@ xorriso -as mkisofs \
     iso_root \
     -o myos.iso
 
-# 7. Install Limine BIOS stage
 ./limine-binary/limine bios-install myos.iso
 
-# 8. Run QEMU unless only a build was requested.
 if [[ "$RUN_QEMU" == 0 ]]; then
     exit 0
 fi
