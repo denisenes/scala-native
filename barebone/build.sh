@@ -13,12 +13,26 @@ SCALA_OBJ_DIR="$REPO_DIR/target/out/native0.5/scala-3.9.0/sandbox/native/generat
 
 RUN_QEMU=1
 WITH_SBT=1
-for arg in "$@"; do
-    case "$arg" in
+# Extra arguments appended to the qemu-system-x86_64 invocation,
+# e.g. --qemu-extra-args="-s -S" to wait for a gdb connection.
+QEMU_EXTRA_ARGS=()
+usage() {
+    echo "Usage: $0 [--no-run] [--no-sbt] [--qemu-extra-args=\"<args>\"]" >&2
+    exit 1
+}
+while (( $# > 0 )); do
+    case "$1" in
         --no-run) RUN_QEMU=0 ;;
         --no-sbt) WITH_SBT=0 ;;
-        *) echo "Usage: $0 [--no-run] [--no-sbt]" >&2; exit 1 ;;
+        --qemu-extra-args=*)
+            read -r -a QEMU_EXTRA_ARGS <<< "${1#*=}" ;;
+        --qemu-extra-args)
+            shift
+            (( $# > 0 )) || usage
+            read -r -a QEMU_EXTRA_ARGS <<< "$1" ;;
+        *) usage ;;
     esac
+    shift
 done
 
 # ---------------------------------------------------------------------------
@@ -54,6 +68,9 @@ cd "$BUILD_DIR"
 # ---------------------------------------------------------------------------
 echo "=== Building megaobj.o ==="
 clang -no-pie -Wl,-r -nostdlib -o megaobj.o "${SCALA_OBJS[@]}"
+
+# Helper: megaobj disasm
+objdump -d -r megaobj.o > megaobj.asm
 
 # Build the host utility in build, keeping the dependency sources untouched.
 mkdir -p "$BUILD_DIR/limine-binary"
@@ -165,4 +182,5 @@ qemu-system-x86_64 \
     -cdrom myos.iso \
     -serial stdio \
     -no-reboot \
-    -no-shutdown
+    -no-shutdown \
+    "${QEMU_EXTRA_ARGS[@]}"
