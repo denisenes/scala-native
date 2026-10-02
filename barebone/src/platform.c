@@ -28,6 +28,9 @@ __attribute__((used, section(".limine_requests_end"))) static volatile uint64_t
 static uint64_t terminal_state[2];
 static struct limine_framebuffer *framebuffer;
 
+extern const uint8_t _binary_font_psf_start[];
+extern const uint8_t _binary_font_psf_end[];
+
 bool platform_init_framebuffer(void) {
     if (framebuffer_request.response == 0 ||
         framebuffer_request.response->framebuffer_count == 0) {
@@ -45,6 +48,12 @@ uint64_t platform_framebuffer_width(void) { return framebuffer->width; }
 uint64_t platform_framebuffer_height(void) { return framebuffer->height; }
 
 uint64_t platform_framebuffer_pitch(void) { return framebuffer->pitch; }
+
+const void *platform_font_address(void) { return _binary_font_psf_start; }
+
+uint64_t platform_font_size(void) {
+    return (uint64_t)(_binary_font_psf_end - _binary_font_psf_start);
+}
 
 uint64_t *platform_terminal_state(void) { return terminal_state; }
 

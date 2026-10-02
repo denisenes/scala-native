@@ -8,6 +8,7 @@ SRC_DIR="$OS_DIR/src"
 BUILD_DIR="$OS_DIR/build"
 LIMINE_DIR="$SRC_DIR/limine-binary"
 KERNEL_SCALA="$REPO_DIR/sandbox/src/main/scala/Kernel.scala"
+FONT_ARCHIVE="$OS_DIR/assets/Uni3-Terminus16.psf.gz"
 
 # Scala Native build output of the sandbox project (sandbox3, Scala 3.9.0).
 SCALA_OBJ_DIR="$REPO_DIR/target/out/native0.5/scala-3.9.0/sandbox/native/generated"
@@ -68,6 +69,20 @@ echo "=== Collected ${#SCALA_OBJS[@]} Scala Native objects ==="
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
+
+if [[ ! -f "$FONT_ARCHIVE" ]]; then
+    echo "Error: console font not found: $FONT_ARCHIVE" >&2
+    exit 1
+fi
+
+# Embed the PSF1 console font as a read-only object file.
+gzip -dc "$FONT_ARCHIVE" > font.psf
+objcopy \
+    --input-target=binary \
+    --output-target=elf64-x86-64 \
+    --binary-architecture=i386:x86-64 \
+    --rename-section .data=.rodata.font,alloc,load,readonly,data,contents \
+    font.psf font.o
 
 # ---------------------------------------------------------------------------
 # 2. Merge all Scala Native objects into a single relocatable object file.
@@ -137,6 +152,7 @@ ld.lld \
     -T "$SRC_DIR/linker.ld" \
     entry.o \
     platform.o \
+    font.o \
     stubs.o \
     megaobj.o \
     -o myos

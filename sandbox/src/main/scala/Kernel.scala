@@ -8,12 +8,14 @@ private object Platform:
   def platform_framebuffer_width(): Long = extern
   def platform_framebuffer_height(): Long = extern
   def platform_framebuffer_pitch(): Long = extern
+  def platform_font_address(): RawPtr = extern
+  def platform_font_size(): Long = extern
   def platform_terminal_state(): RawPtr = extern
   def platform_halt(): Unit = extern
 
 private inline val FontWidth = 8
-private inline val FontHeight = 8
 private inline val DefaultColor = 0x07
+private inline val Psf1HeaderSize = 4L
 
 private inline def at(pointer: RawPtr, byteOffset: Long): RawPtr =
   Intrinsics.elemRawPtr(pointer, Intrinsics.castLongToRawSize(byteOffset))
@@ -36,54 +38,19 @@ private def color(index: Int): Int = index match
   case 14 => 0xffff55
   case _  => 0xffffff
 
-private def glyphRow(character: Byte, row: Int): Int = character.toInt match
-  case 32 => 0x00
-  case 33 => if row == 5 then 0x00 else if row == 6 then 0x18 else if row < 5 then 0x18 else 0x00
-  case 44 => if row == 5 || row == 6 then 0x18 else if row == 7 then 0x30 else 0x00
-  case 72 => if row == 3 then 0x7e else if row < 7 then 0x66 else 0x00
-  case 87 => row match
-    case 3 => 0x6b
-    case 4 => 0x7f
-    case 5 => 0x77
-    case r if r < 7 => 0x63
-    case _ => 0x00
-  case 100 => row match
-    case 0 | 1 => 0x06
-    case 2 => 0x3e
-    case 3 | 4 | 5 => 0x66
-    case 6 => 0x3e
-    case _ => 0x00
-  case 101 => row match
-    case 2 | 6 => 0x3c
-    case 3 => 0x66
-    case 4 => 0x7e
-    case 5 => 0x60
-    case _ => 0x00
-  case 107 => row match
-    case 0 | 1 => 0x60
-    case 2 | 6 => 0x66
-    case 3 | 5 => 0x6c
-    case 4 => 0x78
-    case _ => 0x00
-  case 108 => row match
-    case 0 => 0x38
-    case 1 | 2 | 3 | 4 | 5 => 0x18
-    case 6 => 0x3c
-    case _ => 0x00
-  case 110 => row match
-    case 2 => 0x7c
-    case 3 | 4 | 5 | 6 => 0x66
-    case _ => 0x00
-  case 111 => row match
-    case 2 | 6 => 0x3c
-    case 3 | 4 | 5 => 0x66
-    case _ => 0x00
-  case 114 => row match
-    case 2 => 0x6c
-    case 3 => 0x76
-    case 4 | 5 | 6 => 0x60
-    case _ => 0x00
-  case _ => 0x00
+private inline def unsignedByte(pointer: RawPtr, offset: Long): Int =
+  Intrinsics.loadByte(at(pointer, offset)).toInt & 0xff
+
+private def psf1FontHeight(font: RawPtr): Int = unsignedByte(font, 3L)
+
+private def isValidPsf1(font: RawPtr, size: Long): Boolean =
+  val mode = unsignedByte(font, 2L)
+  val height = psf1FontHeight(font)
+  val glyphCount = if (mode & 0x01) != 0 then 512L else 256L
+  unsignedByte(font, 0L) == 0x36 &&
+    unsignedByte(font, 1L) == 0x04 &&
+    height > 0 &&
+    size >= Psf1HeaderSize + glyphCount * height
 
 private inline def putPixel(
     address: RawPtr,
@@ -97,15 +64,19 @@ private inline def putPixel(
 private def drawCharacter(
     address: RawPtr,
     pitch: Long,
+    font: RawPtr,
+    fontHeight: Int,
     character: Byte,
     x: Long,
     y: Long,
     foreground: Int,
     background: Int
 ): Unit =
+  val glyphIndex = character.toInt & 0xff
+  val glyph = at(font, Psf1HeaderSize + glyphIndex.toLong * fontHeight)
   var row = 0
-  while row < FontHeight do
-    val bits = glyphRow(character, row)
+  while row < fontHeight do
+    val bits = unsignedByte(glyph, row.toLong)
     var column = 0
     while column < FontWidth do
       val isSet = (bits & (1 << (7 - column))) != 0
@@ -136,6 +107,8 @@ private def terminalPutCharacter(
     width: Long,
     height: Long,
     pitch: Long,
+    font: RawPtr,
+    fontHeight: Int,
     character: Byte
 ): Unit =
   val state = Platform.platform_terminal_state()
@@ -149,9 +122,11 @@ private def terminalPutCharacter(
     drawCharacter(
       address,
       pitch,
+      font,
+      fontHeight,
       character,
       column * FontWidth,
-      row * FontHeight,
+      row * fontHeight,
       color(DefaultColor & 0x0f),
       color((DefaultColor >>> 4) & 0x0f)
     )
@@ -162,7 +137,7 @@ private def terminalPutCharacter(
       column = 0
       row += 1
 
-  val terminalHeight = height / FontHeight
+  val terminalHeight = height / fontHeight
   if row >= terminalHeight then row = 0
   Intrinsics.storeLong(state, row)
   Intrinsics.storeLong(at(state, 8L), column)
@@ -192,12 +167,14 @@ private def terminalWriteMessage(
     width: Long,
     height: Long,
     pitch: Long,
+    font: RawPtr,
+    fontHeight: Int,
     message: Int
 ): Unit =
   var index = 0
   var character = messageByte(message, index)
   while character != 0 do
-    terminalPutCharacter(address, width, height, pitch, character)
+    terminalPutCharacter(address, width, height, pitch, font, fontHeight, character)
     index += 1
     character = messageByte(message, index)
 
@@ -213,8 +190,13 @@ private def writeMessage(message: Int, clear: Boolean): Unit =
     val width = Platform.platform_framebuffer_width()
     val height = Platform.platform_framebuffer_height()
     val pitch = Platform.platform_framebuffer_pitch()
-    if clear then terminalInitialize(address, width, height, pitch)
-    terminalWriteMessage(address, width, height, pitch, message)
+    val font = Platform.platform_font_address()
+    val fontSize = Platform.platform_font_size()
+    if isValidPsf1(font, fontSize) then
+      val fontHeight = psf1FontHeight(font)
+      if clear then terminalInitialize(address, width, height, pitch)
+      terminalWriteMessage(address, width, height, pitch, font, fontHeight, message)
+    else Platform.platform_halt()
   else Platform.platform_halt()
 
 @exported("platform_init")
