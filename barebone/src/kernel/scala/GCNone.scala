@@ -3,6 +3,7 @@ package kernel
 import scala.scalanative.unsafe.*
 import scala.scalanative.runtime.{Intrinsics, RawPtr}
 import scala.scalanative.runtime.Intrinsics.*
+import kernel.System
 
 object GC {
   @extern
@@ -26,10 +27,7 @@ object GC {
   private def gcStateReady: Boolean =
     loadLong(hOffset(StateCurrentOffset)) != 0L
 
-  private def outOfMemory(): Nothing = {
-    while (true) ()
-    throw null // unreachable, only here to type-check as Nothing
-  }
+  private def outOfMemory(): Unit = System.fatal(c"[GC]: OOM")
 
   @exported("k_scalanative_GC_init")
   def gcInit(): Unit = {
@@ -59,9 +57,14 @@ object GC {
     storeLong(hOffset(StateUsedOffset), loadLong(hOffset(StateUsedOffset)) + alignedSize)
 
     val obj = castLongToRawPtr(current)
-    storeRawPtr(elemRawPtr(obj, RttiOffset), info) // Object.rtti
+    // Raw allocations (malloc) pass a null info and get no rtti word.
+    if (castRawPtrToLong(info) != 0L)
+      storeRawPtr(elemRawPtr(obj, RttiOffset), info) // Object.rtti
     obj
   }
+
+  /** Raw bump allocation without an rtti word. Backs libc `malloc`. */
+  def allocRaw(size: Long): RawPtr = bumpAlloc(castLongToRawPtr(0L), size)
 
   @exported("k_scalanative_GC_alloc")
   def gcAlloc(info: RawPtr, size: Long): RawPtr = bumpAlloc(info, size)

@@ -5,19 +5,6 @@ import scala.scalanative.unsafe.*
 import kernel.Std.at
 
 object IO {
-  @extern
-  private object Platform:
-    def platform_init_framebuffer(): CBool = extern
-    def platform_framebuffer_address(): RawPtr = extern
-    def platform_framebuffer_width(): Long = extern
-    def platform_framebuffer_height(): Long = extern
-    def platform_framebuffer_pitch(): Long = extern
-    def platform_font_address(): RawPtr = extern
-    def platform_font_size(): Long = extern
-    def platform_terminal_state(): RawPtr = extern
-    def platform_halt(): Unit = extern
-
-  var str: CString = c""
 
   private inline val FontWidth = 8
   private inline val DefaultColor = 0x07
@@ -182,7 +169,6 @@ object IO {
       character = messageByte(message, index)
 
   private def writeMessage(message: Int, clear: Boolean): Unit =
-    str = c"hello"
     if Platform.platform_init_framebuffer() then
       val address = Platform.platform_framebuffer_address()
       val width = Platform.platform_framebuffer_width()
