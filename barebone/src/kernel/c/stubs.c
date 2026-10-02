@@ -7,28 +7,15 @@
 /* ---------- libc / POSIX ---------- */
 
 STUB(access)
-STUB(ceil)
 STUB(close)
 STUB(exit)
-STUB(free)
 STUB(getcwd)
 STUB(geteuid)
 STUB(getuid)
 STUB(lseek)
-STUB(malloc)
-STUB(memcmp)
-STUB(memcpy)
-STUB(memmove)
-STUB(memset)
 STUB(printf)
 STUB(read)
 STUB(remove)
-STUB(strchr)
-STUB(strcpy)
-STUB(strerror)
-STUB(strncmp)
-STUB(strncpy)
-STUB(strrchr)
 STUB(write)
 
 /* ---------- Scala Native runtime ---------- */
