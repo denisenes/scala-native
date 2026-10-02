@@ -3,22 +3,57 @@
 set -euo pipefail
 
 OS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$OS_DIR")"
 SRC_DIR="$OS_DIR/src"
 BUILD_DIR="$OS_DIR/build"
 LIMINE_DIR="$SRC_DIR/limine-binary"
 
-case "${1:-}" in
-    ""|--no-run) ;;
-    *) echo "Usage: $0 [--no-run]" >&2; exit 1 ;;
-esac
+# Scala Native build output of the sandbox project (sandbox3, Scala 3.9.0).
+SCALA_OBJ_DIR="$REPO_DIR/target/out/native0.5/scala-3.9.0/sandbox/native/generated"
+
+RUN_QEMU=1
+WITH_SBT=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-run) RUN_QEMU=0 ;;
+        --no-sbt) WITH_SBT=0 ;;
+        *) echo "Usage: $0 [--no-run] [--no-sbt]" >&2; exit 1 ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
+# 1. Compile the Scala sandbox to native objects with sbt.
+#    NOTE: the sbt-side link step is intentionally broken (see the
+#    "break linking" commits under tools/), so `sbt sandbox3/run` fails
+#    after producing the *.ll.o codegen artifacts. That error is expected.
+#    `sbt clean` is run first so the codegen always regenerates the objects.
+# ---------------------------------------------------------------------------
+if [[ "$WITH_SBT" == 1 ]]; then
+    echo "=== Compiling Scala sandbox (sbt clean && sbt sandbox3/run) ==="
+    (cd "$REPO_DIR" && sbt clean)
+    if ! (cd "$REPO_DIR" && sbt sandbox3/run); then
+        echo "sbt sandbox3/run failed (expected: linking is intentionally broken), continuing"
+    fi
+fi
+
+shopt -s nullglob
+SCALA_OBJS=("$SCALA_OBJ_DIR"/*.ll.o)
+shopt -u nullglob
+if (( ${#SCALA_OBJS[@]} == 0 )); then
+    echo "Error: no *.ll.o objects found in $SCALA_OBJ_DIR" >&2
+    echo "Did the sbt codegen step succeed?" >&2
+    exit 1
+fi
+echo "=== Collected ${#SCALA_OBJS[@]} Scala Native objects ==="
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-if [[ ! -f megaobj.o ]]; then
-    echo "Missing $BUILD_DIR/megaobj.o: copy the Scala Native object here first." >&2
-    exit 1
-fi
+# ---------------------------------------------------------------------------
+# 2. Merge all Scala Native objects into a single relocatable object file.
+# ---------------------------------------------------------------------------
+echo "=== Building megaobj.o ==="
+clang -no-pie -Wl,-r -nostdlib -o megaobj.o "${SCALA_OBJS[@]}"
 
 # Build the host utility in build, keeping the dependency sources untouched.
 mkdir -p "$BUILD_DIR/limine-binary"
@@ -122,7 +157,7 @@ xorriso -as mkisofs \
 ./limine-binary/limine bios-install myos.iso
 
 # 8. Run QEMU unless only a build was requested.
-if [[ "${1:-}" == --no-run ]]; then
+if [[ "$RUN_QEMU" == 0 ]]; then
     exit 0
 fi
 
