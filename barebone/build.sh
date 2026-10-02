@@ -7,6 +7,7 @@ REPO_DIR="$(dirname "$OS_DIR")"
 SRC_DIR="$OS_DIR/src"
 BUILD_DIR="$OS_DIR/build"
 LIMINE_DIR="$SRC_DIR/limine-binary"
+KERNEL_SCALA="$REPO_DIR/sandbox/src/main/scala/Kernel.scala"
 
 # Scala Native build output of the sandbox project (sandbox3, Scala 3.9.0).
 SCALA_OBJ_DIR="$REPO_DIR/target/out/native0.5/scala-3.9.0/sandbox/native/generated"
@@ -29,6 +30,11 @@ done
 #    `sbt clean` is run first so the codegen always regenerates the objects.
 # ---------------------------------------------------------------------------
 if [[ "$WITH_SBT" == 1 ]]; then
+    if [[ ! -f "$KERNEL_SCALA" ]]; then
+        echo "Error: Scala kernel source not found: $KERNEL_SCALA" >&2
+        exit 1
+    fi
+
     echo "=== Compiling Scala sandbox (sbt clean && sbt sandbox3/run) ==="
     (cd "$REPO_DIR" && sbt clean)
     if ! (cd "$REPO_DIR" && sbt sandbox3/run); then
@@ -61,11 +67,11 @@ cp "$LIMINE_DIR/Makefile" "$LIMINE_DIR/limine.c" \
     "$LIMINE_DIR/limine-bios-hdd.h" "$BUILD_DIR/limine-binary/"
 make -C "$BUILD_DIR/limine-binary"
 
-# 1. kernel.c
+# 3. Compile the C platform bridge used by Kernel.scala.
 clang \
     --target=x86_64-unknown-none-elf \
-    -c "$SRC_DIR/kernel.c" \
-    -o kernel.o \
+    -c "$SRC_DIR/platform.c" \
+    -o platform.o \
     -std=gnu11 \
     -ffreestanding \
     -fno-stack-protector \
@@ -80,7 +86,7 @@ clang \
     -Wall \
     -Wextra
 
-# 2. entry.S
+# 4. Compile the kernel entry point.
 clang \
     --target=x86_64-unknown-none-elf \
     -c "$SRC_DIR/entry.S" \
@@ -91,7 +97,7 @@ clang \
     -mno-red-zone \
     -mcmodel=kernel
 
-# 3. stubs.c
+# 5. Compile the Scala Native runtime stubs.
 clang \
     --target=x86_64-unknown-none-elf \
     -c "$SRC_DIR/stubs.c" \
@@ -105,7 +111,7 @@ clang \
     -mcmodel=kernel \
     -O2
 
-# 4. Link kernel + Scala Native object
+# 6. Link the entry point, platform bridge, and Scala Native objects.
 ld.lld \
     -m elf_x86_64 \
     -nostdlib \
@@ -113,7 +119,7 @@ ld.lld \
     -z max-page-size=0x1000 \
     -T "$SRC_DIR/linker.ld" \
     entry.o \
-    kernel.o \
+    platform.o \
     stubs.o \
     megaobj.o \
     -o myos
