@@ -12,37 +12,38 @@ object GC {
     @name("__gc_heap_hi") var hi: RawPtr = extern
   }
 
-  private final val RttiOffset = 0 // Object.rtti: RawPtr
-  private final val ArrayLengthOffset = 8 // ArrayHeader.length: Int
-  private final val ArrayStrideOffset = 12 // ArrayHeader.stride: Int
-  private final val RttiSizeOffset = 32 // ClassRtti.size: Int
+  private final val RttiOffset = 0
+  private final val ArrayLengthOffset = 8
+  private final val ArrayStrideOffset = 12
+  private final val RttiSizeOffset = 32
 
-  private final val StateCurrentOffset = 0 // RawPtr, bump cursor
-  private final val StateEndOffset = 8 // RawPtr, end of heap
-  private final val StateUsedOffset = 16 // Long, total bytes handed out
+  private final val StateCurrentOffset = 0
+  private final val StateEndOffset = 8
+  private final val StateUsedOffset = 16
   private final val StateBytes = 32
 
   private def hOffset(offset: Int): RawPtr = elemRawPtr(HeapBounds.lo, offset)
 
-  private def gcStateReady: Boolean =
-    loadLong(hOffset(StateCurrentOffset)) != 0L
-
   private def outOfMemory(): Unit = System.fatal(c"[GC]: OOM")
 
   @exported("k_scalanative_GC_init")
-  def gcInit(): Unit = {
-    if (!gcStateReady) {
-      val lo = castRawPtrToLong(HeapBounds.lo)
-      val hi = castRawPtrToLong(HeapBounds.hi)
-      storeLong(hOffset(StateCurrentOffset), lo + StateBytes)
-      storeLong(hOffset(StateEndOffset), hi)
-      storeLong(hOffset(StateUsedOffset), 0L)
-    }
+  def init(): Unit = {
+    val lo = castRawPtrToLong(HeapBounds.lo)
+    val hi = castRawPtrToLong(HeapBounds.hi)
+    storeLong(hOffset(StateCurrentOffset), lo + StateBytes)
+    storeLong(hOffset(StateEndOffset), hi)
+    storeLong(hOffset(StateUsedOffset), 0L)
+  }
+
+  @exported("k_scalanative_GC_info")
+  def info(): Unit = {
+    System.print(c"[MM] heap start: ")
+    System.println(loadRawPtr(hOffset(StateCurrentOffset)))
+    System.print(c"[MM] heap end:   ")
+    System.println(loadRawPtr(hOffset(StateEndOffset)))
   }
 
   private def bumpAlloc(info: RawPtr, size: Long): RawPtr = {
-    if (!gcStateReady) gcInit()
-
     var alignedSize = (size + 7L) & ~7L
     if (alignedSize < 8L) alignedSize = 8L
 
@@ -97,7 +98,7 @@ object GC {
   def gcGetMaxHeapSize(): Long = castRawPtrToLong(HeapBounds.hi) - castRawPtrToLong(HeapBounds.lo)
 
   @exported("k_scalanative_GC_get_used_heapsize")
-  def gcGetUsedHeapSize(): Long = if !gcStateReady then 0L else loadLong(hOffset(StateUsedOffset))
+  def gcGetUsedHeapSize(): Long = loadLong(hOffset(StateUsedOffset))
 
   @exported("k_scalanative_GC_stats_collection_total")
   def gcStatsCollectionTotal(): Long = -1L

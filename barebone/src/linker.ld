@@ -16,6 +16,7 @@ PHDRS
 }
 
 PROVIDE(scalanative_GC_init = k_scalanative_GC_init);
+PROVIDE(scalanative_GC_info = k_scalanative_GC_info);
 PROVIDE(scalanative_GC_alloc_small = k_scalanative_GC_alloc_small);
 PROVIDE(scalanative_GC_alloc_array = k_scalanative_GC_alloc_array);
 

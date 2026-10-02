@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include "std.h"
 
 #include "limine.h"
 
@@ -36,6 +37,10 @@ bool platform_init_framebuffer(void) {
 
     framebuffer = framebuffer_request.response->framebuffers[0];
     return true;
+}
+
+bool platform_check_framebuffer(void) {
+    return framebuffer != NULL;
 }
 
 void *platform_framebuffer_address(void) { return framebuffer->address; }

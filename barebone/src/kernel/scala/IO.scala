@@ -1,11 +1,10 @@
 package kernel
 
-import scala.scalanative.runtime.{Intrinsics, RawPtr}
+import scala.scalanative.runtime.{Intrinsics, RawPtr, toRawPtr}
 import scala.scalanative.unsafe.*
 import kernel.Std.at
 
 object IO {
-
   private inline val FontWidth = 8
   private inline val DefaultColor = 0x07
   private inline val Psf1HeaderSize = 4L
@@ -42,13 +41,7 @@ object IO {
       height > 0 &&
       size >= Psf1HeaderSize + glyphCount * height
 
-  private inline def putPixel(
-      address: RawPtr,
-      pitch: Long,
-      x: Long,
-      y: Long,
-      value: Int
-  ): Unit =
+  private inline def putPixel(address: RawPtr,pitch: Long, x: Long, y: Long, value: Int): Unit =
     Intrinsics.storeInt(at(address, y * pitch + x * 4L), value)
 
   private def drawCharacter(
@@ -74,12 +67,7 @@ object IO {
         column += 1
       row += 1
 
-  private def terminalInitialize(
-      address: RawPtr,
-      width: Long,
-      height: Long,
-      pitch: Long
-  ): Unit =
+  private def terminalInitialize(address: RawPtr, width: Long, height: Long, pitch: Long): Unit =
     val state = Platform.platform_terminal_state()
     Intrinsics.storeLong(state, 0L)
     Intrinsics.storeLong(at(state, 8L), 0L)
@@ -132,44 +120,24 @@ object IO {
     Intrinsics.storeLong(state, row)
     Intrinsics.storeLong(at(state, 8L), column)
 
-  private def messageByte(message: Int, index: Int): Byte = message match
-    case 0 => index match
-      case 0 => 72
-      case 1 => 101
-      case 2 | 3 => 108
-      case 4 => 111
-      case 5 => 10
-      case _ => 0
-    case 1 => index match
-      case 0 => 111
-      case 1 => 107
-      case 2 => 10
-      case _ => 0
-    case _ => index match
-      case 0 => 110
-      case 1 => 111
-      case 2 => 107
-      case 3 => 10
-      case _ => 0
-
-  private def terminalWriteMessage(
+  private def terminalWriteString(
       address: RawPtr,
       width: Long,
       height: Long,
       pitch: Long,
       font: RawPtr,
       fontHeight: Int,
-      message: Int
+      text: RawPtr
   ): Unit =
-    var index = 0
-    var character = messageByte(message, index)
+    var index = 0L
+    var character = Intrinsics.loadByte(at(text, index))
     while character != 0 do
       terminalPutCharacter(address, width, height, pitch, font, fontHeight, character)
       index += 1
-      character = messageByte(message, index)
+      character = Intrinsics.loadByte(at(text, index))
 
-  private def writeMessage(message: Int, clear: Boolean): Unit =
-    if Platform.platform_init_framebuffer() then
+  private[kernel] def writeMessage(message: CString, clear: Boolean): Unit =
+    if Platform.platform_check_framebuffer() then
       val address = Platform.platform_framebuffer_address()
       val width = Platform.platform_framebuffer_width()
       val height = Platform.platform_framebuffer_height()
@@ -179,17 +147,8 @@ object IO {
       if isValidPsf1(font, fontSize) then
         val fontHeight = psf1FontHeight(font)
         if clear then terminalInitialize(address, width, height, pitch)
-        terminalWriteMessage(address, width, height, pitch, font, fontHeight, message)
+        terminalWriteString(address, width, height, pitch, font, fontHeight, toRawPtr(message))
       else Platform.platform_halt()
-    else Platform.platform_halt()
-
-  @exported("platform_init")
-  def platform_init(): Unit = writeMessage(message = 0, clear = true)
-
-  @exported("report_kmain_ok")
-  def report_kmain_ok(result: Int): Unit = writeMessage(message = 1, clear = false)
-
-  @exported("report_kmain_bad")
-  def report_kmain_bad(result: Int): Unit = writeMessage(message = 2, clear = false)
-
+    else 
+      Platform.platform_halt()
 }

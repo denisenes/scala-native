@@ -1,4 +1,5 @@
 import scala.scalanative.unsafe.*
+import kernel.System
 
 case class Point2D(x: Int, y: Int)
 
@@ -15,8 +16,10 @@ def loadY(): Int = GlobalCtx.obj.y
 @exported("kmain")
 def kmain(): Int =
   store()
-  val exitCode: Int = loadX() + loadY()
-  exitCode
+  val res: Int = loadX() + loadY()
+  System.println(res)
+  res
 
+// TODO: use as entrypoint
 @main
 def main(): Int = kmain()
