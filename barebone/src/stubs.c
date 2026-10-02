@@ -64,10 +64,6 @@ STUB(scalanative_errno)
 STUB(scalanative_fionread)
 STUB(scalanative_f_ok)
 
-STUB(scalanative_GC_alloc_array)
-STUB(scalanative_GC_alloc_small)
-STUB(scalanative_GC_init)
-
 STUB(scalanative_getpwuid)
 STUB(scalanative_get_vmoffset)
 

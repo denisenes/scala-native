@@ -94,12 +94,14 @@ clang -no-pie -Wl,-r -nostdlib -o megaobj.o "${SCALA_OBJS[@]}"
 objdump -d -r megaobj.o > megaobj.asm
 
 # Build the host utility in build, keeping the dependency sources untouched.
+echo "=== Building limine-binary ==="
 mkdir -p "$BUILD_DIR/limine-binary"
 cp "$LIMINE_DIR/Makefile" "$LIMINE_DIR/limine.c" \
     "$LIMINE_DIR/limine-bios-hdd.h" "$BUILD_DIR/limine-binary/"
 make -C "$BUILD_DIR/limine-binary"
 
 # 3. Compile the C platform bridge used by Kernel.scala.
+echo "=== Compile platfrom.c ==="
 clang \
     --target=x86_64-unknown-none-elf \
     -c "$SRC_DIR/platform.c" \
@@ -119,6 +121,7 @@ clang \
     -Wextra
 
 # 4. Compile the kernel entry point.
+echo "=== Compile entry.s ==="
 clang \
     --target=x86_64-unknown-none-elf \
     -c "$SRC_DIR/entry.S" \
@@ -130,6 +133,7 @@ clang \
     -mcmodel=kernel
 
 # 5. Compile the Scala Native runtime stubs.
+echo "=== Compile stubs.c ==="
 clang \
     --target=x86_64-unknown-none-elf \
     -c "$SRC_DIR/stubs.c" \
@@ -144,6 +148,7 @@ clang \
     -O2
 
 # 6. Link the entry point, platform bridge, and Scala Native objects.
+echo "=== Linking... ==="
 ld.lld \
     -m elf_x86_64 \
     -nostdlib \
@@ -205,4 +210,5 @@ qemu-system-x86_64 \
     -serial stdio \
     -no-reboot \
     -no-shutdown \
+    -m 1G \
     "${QEMU_EXTRA_ARGS[@]}"

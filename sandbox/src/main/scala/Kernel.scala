@@ -13,6 +13,8 @@ private object Platform:
   def platform_terminal_state(): RawPtr = extern
   def platform_halt(): Unit = extern
 
+var str: CString = c""
+
 private inline val FontWidth = 8
 private inline val DefaultColor = 0x07
 private inline val Psf1HeaderSize = 4L
@@ -185,6 +187,7 @@ private def strlen(text: RawPtr): Long =
   length
 
 private def writeMessage(message: Int, clear: Boolean): Unit =
+  str = c"hello"
   if Platform.platform_init_framebuffer() then
     val address = Platform.platform_framebuffer_address()
     val width = Platform.platform_framebuffer_width()

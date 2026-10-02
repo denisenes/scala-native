@@ -15,6 +15,11 @@ PHDRS
     data PT_LOAD;
 }
 
+PROVIDE(scalanative_GC_init = k_scalanative_GC_init);
+PROVIDE(scalanative_GC_alloc_small = k_scalanative_GC_alloc_small);
+PROVIDE(scalanative_GC_alloc_array = k_scalanative_GC_alloc_array);
+
+
 SECTIONS
 {
     /* We want to be placed in the topmost 2GiB of the address space, for optimisations */
@@ -64,6 +69,16 @@ SECTIONS
     .bss : {
         *(.bss .bss.*)
         *(COMMON)
+    } :data
+
+    .heap : {
+        . = ALIGN(16);
+        . += 64M; // heap size
+    } :data
+
+    .gc_heap_bounds : {
+        __gc_heap_lo = .;  QUAD(ADDR(.heap));
+        __gc_heap_hi = .;  QUAD(ADDR(.heap) + SIZEOF(.heap));
     } :data
 
     /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */
