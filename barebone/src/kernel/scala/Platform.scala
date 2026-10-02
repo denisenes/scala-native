@@ -32,7 +32,7 @@ object Platform {
     GCExports.scalanative_GC_init()
 
     IO.writeMessage(message = c"==========================================================\n", clear = true)
-    IO.writeMessage(message = c"Welcome to ScalOS, the first Scala-written OS in the world\n", clear = false)
+    IO.writeMessage(message = c"Welcome to ScalOS, the first Scala-written OS in the world\n", clear = false) // TODO: think about name
     IO.writeMessage(message = c"==========================================================\n", clear = false)
     GCExports.scalanative_GC_info()
   }
