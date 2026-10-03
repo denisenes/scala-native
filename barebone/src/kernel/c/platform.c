@@ -59,6 +59,31 @@ uint64_t platform_font_size(void) {
 
 uint64_t *platform_terminal_state(void) { return terminal_state; }
 
+/*
+ * A temporary frame delay until the kernel has a timer driver.  Keeping it on
+ * the platform side makes the busy loop observable to the compiler and easy
+ * to replace with a real timer interrupt later.
+ */
+void platform_delay(uint64_t iterations) {
+    while (iterations-- != 0) {
+        __asm__ volatile("pause");
+    }
+}
+
+static inline uint8_t port_in8(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
+/* Return one PS/2 scan-code byte, or -1 when the controller has no data. */
+int32_t platform_poll_key(void) {
+    if ((port_in8(0x64) & 0x01) == 0) {
+        return -1;
+    }
+    return (int32_t)port_in8(0x60);
+}
+
 __attribute__((noreturn)) 
 void platform_halt(void) {
     for (;;) {

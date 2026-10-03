@@ -6,26 +6,7 @@ import kernel.Std.at
 
 object IO {
   private inline val FontWidth = 8
-  private inline val DefaultColor = 0x07
   private inline val Psf1HeaderSize = 4L
-
-  private def color(index: Int): Int = index match
-    case 0  => 0x000000
-    case 1  => 0x0000aa
-    case 2  => 0x00aa00
-    case 3  => 0x00aaaa
-    case 4  => 0xaa0000
-    case 5  => 0xaa00aa
-    case 6  => 0xaa5500
-    case 7  => 0xaaaaaa
-    case 8  => 0x555555
-    case 9  => 0x5555ff
-    case 10 => 0x55ff55
-    case 11 => 0x55ffff
-    case 12 => 0xff5555
-    case 13 => 0xff55ff
-    case 14 => 0xffff55
-    case _  => 0xffffff
 
   private inline def unsignedByte(pointer: RawPtr, offset: Long): Int =
     Intrinsics.loadByte(at(pointer, offset)).toInt & 0xff
@@ -41,8 +22,30 @@ object IO {
       height > 0 &&
       size >= Psf1HeaderSize + glyphCount * height
 
-  private inline def putPixel(address: RawPtr,pitch: Long, x: Long, y: Long, value: Int): Unit =
+  private inline def putPixel(address: RawPtr, pitch: Long, x: Long, y: Long, value: Int): Unit =
     Intrinsics.storeInt(at(address, y * pitch + x * 4L), value)
+
+  def fillRectangle(x: Int, y: Int, width: Int, height: Int, value: Int): Unit =
+    if !Platform.platform_check_framebuffer() then Platform.platform_halt()
+    if width > 0 && height > 0 then
+      val framebufferWidth = Platform.platform_framebuffer_width()
+      val framebufferHeight = Platform.platform_framebuffer_height()
+      val startX = if x < 0 then 0L else x.toLong
+      val startY = if y < 0 then 0L else y.toLong
+      val requestedEndX = x.toLong + width.toLong
+      val requestedEndY = y.toLong + height.toLong
+      val endX = if requestedEndX > framebufferWidth then framebufferWidth else requestedEndX
+      val endY = if requestedEndY > framebufferHeight then framebufferHeight else requestedEndY
+      if startX < endX && startY < endY then
+        val address = Platform.platform_framebuffer_address()
+        val pitch = Platform.platform_framebuffer_pitch()
+        var pixelY = startY
+        while pixelY < endY do
+          var pixelX = startX
+          while pixelX < endX do
+            putPixel(address, pitch, pixelX, pixelY, value)
+            pixelX += 1
+          pixelY += 1
 
   private def drawCharacter(
       address: RawPtr,
@@ -76,7 +79,7 @@ object IO {
     while y < height do
       var x = 0L
       while x < width do
-        putPixel(address, pitch, x, y, color(0))
+        putPixel(address, pitch, x, y, Colors.Black)
         x += 1
       y += 1
 
@@ -105,8 +108,8 @@ object IO {
         character,
         column * FontWidth,
         row * fontHeight,
-        color(DefaultColor & 0x0f),
-        color((DefaultColor >>> 4) & 0x0f)
+        Colors.LightGray,
+        Colors.Black
       )
       column += 1
 
@@ -135,6 +138,82 @@ object IO {
       terminalPutCharacter(address, width, height, pitch, font, fontHeight, character)
       index += 1
       character = Intrinsics.loadByte(at(text, index))
+
+  def drawTextAt(x: Int, y: Int, text: CString, foreground: Int, background: Int): Unit =
+    if !Platform.platform_check_framebuffer() then Platform.platform_halt()
+    val address = Platform.platform_framebuffer_address()
+    val pitch = Platform.platform_framebuffer_pitch()
+    val font = Platform.platform_font_address()
+    val fontSize = Platform.platform_font_size()
+    if !isValidPsf1(font, fontSize) then Platform.platform_halt()
+    val fontHeight = psf1FontHeight(font)
+    val rawText = toRawPtr(text)
+    var cursorX = x
+    var cursorY = y
+    var index = 0L
+    var character = Intrinsics.loadByte(at(rawText, index))
+    while character != 0 do
+      if character == 10.toByte then
+        cursorX = x
+        cursorY += fontHeight
+      else
+        drawCharacter(
+          address,
+          pitch,
+          font,
+          fontHeight,
+          character,
+          cursorX.toLong,
+          cursorY.toLong,
+          foreground,
+          background
+        )
+        cursorX += FontWidth
+      index += 1
+      character = Intrinsics.loadByte(at(rawText, index))
+
+  /** Draw an integer without allocating a temporary CString. */
+  def drawNumberAt(x: Int, y: Int, value: Int, foreground: Int, background: Int): Unit =
+    if !Platform.platform_check_framebuffer() then Platform.platform_halt()
+    val address = Platform.platform_framebuffer_address()
+    val pitch = Platform.platform_framebuffer_pitch()
+    val font = Platform.platform_font_address()
+    val fontSize = Platform.platform_font_size()
+    if !isValidPsf1(font, fontSize) then Platform.platform_halt()
+    val fontHeight = psf1FontHeight(font)
+    var cursorX = x
+    var magnitude = value.toLong
+    if magnitude < 0 then
+      drawCharacter(address, pitch, font, fontHeight, '-'.toByte, cursorX, y, foreground, background)
+      cursorX += FontWidth
+      magnitude = -magnitude
+    var divisor = 1L
+    while magnitude / divisor >= 10L do divisor *= 10L
+    while divisor > 0L do
+      val digit = ((magnitude / divisor) % 10L).toInt
+      drawCharacter(
+        address,
+        pitch,
+        font,
+        fontHeight,
+        ('0' + digit).toByte,
+        cursorX.toLong,
+        y.toLong,
+        foreground,
+        background
+      )
+      cursorX += FontWidth
+      divisor /= 10L
+
+  def clearScreen(): Unit =
+    if Platform.platform_check_framebuffer() then
+      terminalInitialize(
+        Platform.platform_framebuffer_address(),
+        Platform.platform_framebuffer_width(),
+        Platform.platform_framebuffer_height(),
+        Platform.platform_framebuffer_pitch()
+      )
+    else Platform.platform_halt()
 
   private[kernel] def writeMessage(message: CString, clear: Boolean): Unit =
     if Platform.platform_check_framebuffer() then

@@ -1,24 +1,10 @@
 import scala.scalanative.unsafe.*
-import kernel.System
-
-case class Point2D(x: Int, y: Int)
-
-object GlobalCtx {
-  var obj: Point2D = _
-}
-
-def store(): Unit =
-  GlobalCtx.obj = Point2D(40, 2)
-
-def loadX(): Int = GlobalCtx.obj.x
-def loadY(): Int = GlobalCtx.obj.y
+import kernel.Tetris
 
 @exported("kmain")
 def kmain(): Int =
-  store()
-  val res: Int = loadX() + loadY()
-  System.println(res)
-  res
+  Tetris.run()
+  0
 
 // TODO: use as entrypoint
 @main
