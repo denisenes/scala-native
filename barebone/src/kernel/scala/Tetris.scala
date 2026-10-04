@@ -67,9 +67,11 @@ object Tetris:
     LShape()
   )
   private val board = new Array[Int](BoardWidth * BoardHeight)
+  private val figureBag = new Array[Int](figures.length)
 
-  private var figureIndex = 0
   private var currentFigure: Tetromino = figures(0)
+  private var figureBagIndex = figures.length
+  private var randomState = 1L
   private var rotation = 0
   private var pieceX = 3
   private var pieceY = 0
@@ -83,6 +85,33 @@ object Tetris:
   private var panelLeft = 0
 
   private inline def level: Int = clearedLines / 10 + 1
+
+  private def nextRandom(): Long =
+    var value = randomState
+    value ^= value << 13
+    value ^= value >>> 7
+    value ^= value << 17
+    randomState = value
+    value
+
+  private def refillFigureBag(): Unit =
+    var index = 0
+    while index < figureBag.length do
+      figureBag(index) = index
+      index += 1
+    index = figureBag.length - 1
+    while index > 0 do
+      val other = ((nextRandom() >>> 1) % (index + 1)).toInt
+      val saved = figureBag(index)
+      figureBag(index) = figureBag(other)
+      figureBag(other) = saved
+      index -= 1
+    figureBagIndex = 0
+
+  private def selectNextFigure(): Unit =
+    if figureBagIndex >= figureBag.length then refillFigureBag()
+    currentFigure = figures(figureBag(figureBagIndex))
+    figureBagIndex += 1
 
   private def figureWidth(figure: Tetromino, figureRotation: Int): Int =
     if (figureRotation & 1) == 0 then figure.pixels(0).length
@@ -171,13 +200,8 @@ object Tetris:
   private def drawPlayfield(): Unit =
     val width = BoardWidth * cellSize
     val height = BoardHeight * cellSize
-    IO.fillRectangle(
-      boardLeft - BorderSize,
-      boardTop - BorderSize,
-      width + BorderSize * 2,
-      height + BorderSize * 2,
-      Colors.LightGray
-    )
+    IO.fillRectangle(boardLeft - BorderSize, boardTop - BorderSize,
+      width + BorderSize * 2, height + BorderSize * 2, Colors.LightGray)
     IO.fillRectangle(boardLeft, boardTop, width, height, Colors.Black)
     var y = 0
     while y < BoardHeight do
@@ -188,91 +212,29 @@ object Tetris:
         x += 1
       y += 1
 
+  private def drawPanelText(yOffset: Int, text: CString, color: Int): Unit =
+    IO.drawTextAt(panelLeft, boardTop + yOffset, text, color, Colors.Black)
+
   private def drawInterface(): Unit =
-    IO.drawTextAt(
-      boardLeft,
-      boardTop - 22,
-      c"SCALA TETRIS",
-      Colors.BrightCyan,
-      Colors.Black
-    )
-    IO.drawTextAt(panelLeft, boardTop, c"SCORE", Colors.White, Colors.Black)
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 52,
-      c"LINES",
-      Colors.White,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 104,
-      c"LEVEL",
-      Colors.White,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 180,
-      c"CONTROLS",
-      Colors.BrightCyan,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 204,
-      c"LEFT/RIGHT  MOVE",
-      Colors.LightGray,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 224,
-      c"UP          ROTATE",
-      Colors.LightGray,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 244,
-      c"DOWN        SOFT DROP",
-      Colors.LightGray,
-      Colors.Black
-    )
-    IO.drawTextAt(
-      panelLeft,
-      boardTop + 264,
-      c"Q           QUIT",
-      Colors.LightGray,
-      Colors.Black
-    )
+    IO.drawTextAt(boardLeft, boardTop - 22, c"SCALA TETRIS", Colors.BrightCyan, Colors.Black)
+    drawPanelText(0, c"SCORE", Colors.White)
+    drawPanelText(52, c"LINES", Colors.White)
+    drawPanelText(104, c"LEVEL", Colors.White)
+    drawPanelText(180, c"CONTROLS", Colors.BrightCyan)
+    drawPanelText(204, c"LEFT/RIGHT  MOVE", Colors.LightGray)
+    drawPanelText(224, c"UP          ROTATE", Colors.LightGray)
+    drawPanelText(244, c"DOWN        SOFT DROP", Colors.LightGray)
+    drawPanelText(264, c"Q           QUIT", Colors.LightGray)
     drawStats()
 
+  private def drawStat(yOffset: Int, value: Int): Unit =
+    IO.fillRectangle(panelLeft, boardTop + yOffset, 112, 22, Colors.Black)
+    IO.drawNumberAt(panelLeft, boardTop + yOffset + 2, value, Colors.White, Colors.Black)
+
   private def drawStats(): Unit =
-    IO.fillRectangle(panelLeft, boardTop + 18, 112, 22, Colors.Black)
-    IO.fillRectangle(panelLeft, boardTop + 70, 112, 22, Colors.Black)
-    IO.fillRectangle(panelLeft, boardTop + 122, 112, 22, Colors.Black)
-    IO.drawNumberAt(
-      panelLeft,
-      boardTop + 20,
-      score,
-      Colors.White,
-      Colors.Black
-    )
-    IO.drawNumberAt(
-      panelLeft,
-      boardTop + 72,
-      clearedLines,
-      Colors.White,
-      Colors.Black
-    )
-    IO.drawNumberAt(
-      panelLeft,
-      boardTop + 124,
-      level,
-      Colors.White,
-      Colors.Black
-    )
+    drawStat(18, score)
+    drawStat(70, clearedLines)
+    drawStat(122, level)
 
   private def lockPiece(): Unit =
     var localY = 0
@@ -324,8 +286,7 @@ object Tetris:
     clearedLines = 0
 
   private def spawnNext(): Unit =
-    figureIndex = (figureIndex + 1) % figures.length
-    currentFigure = figures(figureIndex)
+    selectNextFigure()
     rotation = 0
     pieceX = (BoardWidth - figureWidth(currentFigure, rotation)) / 2
     pieceY = 0
@@ -406,12 +367,13 @@ object Tetris:
     val ticks = BaseDropTicks - (level - 1) * DropTicksPerLevel
     if ticks < MinimumDropTicks then MinimumDropTicks else ticks
 
-  /** Clear once, then update only the moving piece and changed UI values. */
   def run(): Unit =
     resetGame()
     configureLayout()
-    figureIndex = 0
-    currentFigure = figures(figureIndex)
+    randomState = Platform.platform_random_seed()
+    if randomState == 0 then randomState = 1L
+    figureBagIndex = figures.length
+    selectNextFigure()
     rotation = 0
     pieceX = (BoardWidth - figureWidth(currentFigure, rotation)) / 2
     pieceY = 0

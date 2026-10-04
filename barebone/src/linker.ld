@@ -63,23 +63,20 @@ SECTIONS
         *(.data .data.*)
     } :data
 
-    /* NOTE: .bss needs to be the last thing mapped to :data, otherwise lots of */
-    /* unnecessary zeros will be written to the binary. */
-    /* If you need, for example, .init_array and .fini_array, those should be placed */
-    /* above this. */
+    .gc_heap_bounds : {
+        __gc_heap_lo = .;  QUAD(__gc_heap_start);
+        __gc_heap_hi = .;  QUAD(__gc_heap_end);
+    } :data
+
     .bss : {
         *(.bss .bss.*)
         *(COMMON)
     } :data
 
-    .heap : {
-        . = ALIGN(16);
+    .heap ALIGN(16) (NOLOAD) : {
+        __gc_heap_start = .;
         . += 64M; // heap size
-    } :data
-
-    .gc_heap_bounds : {
-        __gc_heap_lo = .;  QUAD(ADDR(.heap));
-        __gc_heap_hi = .;  QUAD(ADDR(.heap) + SIZEOF(.heap));
+        __gc_heap_end = .;
     } :data
 
     /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */
@@ -88,4 +85,3 @@ SECTIONS
         *(.note .note.*)
     }
 }
-

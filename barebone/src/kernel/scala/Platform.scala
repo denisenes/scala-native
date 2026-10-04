@@ -16,7 +16,9 @@ object Platform {
   def platform_font_size(): Long = extern
   def platform_terminal_state(): RawPtr = extern
   def platform_init_timer(): Unit = extern
+  def platform_init_keyboard(): CBool = extern
   def platform_delay(milliseconds: Long): Unit = extern
+  def platform_random_seed(): Long = extern
   def platform_poll_key(): Int = extern
   def platform_halt(): Unit = extern
 }
@@ -40,6 +42,8 @@ private def platform_init(): Unit = {
   IO.writeMessage(message = c"==========================================================\n", clear = false)
   GCExports.scalanative_GC_info()
   Platform.platform_init_timer()
+  if !Platform.platform_init_keyboard() then
+    System.println(c"[PS/2] keyboard initialization failed")
 }
 
 @exported("platform_terminate")

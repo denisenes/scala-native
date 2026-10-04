@@ -51,11 +51,24 @@ extern const uint8_t _binary_font_psf_end[];
 
 bool platform_init_framebuffer(void) {
     if (framebuffer_request.response == 0 ||
-        framebuffer_request.response->framebuffer_count == 0) {
+        framebuffer_request.response->framebuffer_count == 0 ||
+        framebuffer_request.response->framebuffers == 0) {
         return false;
     }
 
     framebuffer = framebuffer_request.response->framebuffers[0];
+    if (framebuffer == 0 || framebuffer->address == 0 ||
+        framebuffer->width == 0 || framebuffer->height == 0 ||
+        framebuffer->bpp != 32 ||
+        framebuffer->memory_model != LIMINE_FRAMEBUFFER_RGB ||
+        framebuffer->red_mask_size != 8 || framebuffer->red_mask_shift != 16 ||
+        framebuffer->green_mask_size != 8 || framebuffer->green_mask_shift != 8 ||
+        framebuffer->blue_mask_size != 8 || framebuffer->blue_mask_shift != 0 ||
+        framebuffer->width > UINT64_MAX / 4 ||
+        framebuffer->pitch < framebuffer->width * 4) {
+        framebuffer = NULL;
+        return false;
+    }
     return true;
 }
 
@@ -91,6 +104,98 @@ static inline void port_out8(uint16_t port, uint8_t value) {
 
 static inline void io_wait(void) {
     port_out8(0x80, 0);
+}
+
+enum {
+    PS2_DATA_PORT = 0x60,
+    PS2_STATUS_PORT = 0x64,
+    PS2_COMMAND_PORT = 0x64,
+    PS2_STATUS_OUTPUT_FULL = 1 << 0,
+    PS2_STATUS_INPUT_FULL = 1 << 1,
+    PS2_STATUS_AUX_DATA = 1 << 5,
+    PS2_STATUS_ERROR = (1 << 6) | (1 << 7),
+    PS2_TIMEOUT = 100000,
+};
+
+static bool ps2_wait_input_empty(void) {
+    for (uint32_t remaining = PS2_TIMEOUT; remaining > 0; --remaining) {
+        if ((port_in8(PS2_STATUS_PORT) & PS2_STATUS_INPUT_FULL) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ps2_wait_output_full(void) {
+    for (uint32_t remaining = PS2_TIMEOUT; remaining > 0; --remaining) {
+        if ((port_in8(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ps2_write_command(uint8_t command) {
+    if (!ps2_wait_input_empty()) {
+        return false;
+    }
+    port_out8(PS2_COMMAND_PORT, command);
+    return true;
+}
+
+static bool ps2_write_data(uint8_t value) {
+    if (!ps2_wait_input_empty()) {
+        return false;
+    }
+    port_out8(PS2_DATA_PORT, value);
+    return true;
+}
+
+static void ps2_flush_output(void) {
+    while ((port_in8(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) != 0) {
+        (void)port_in8(PS2_DATA_PORT);
+    }
+}
+
+static bool ps2_send_keyboard_byte(uint8_t value) {
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        if (!ps2_write_data(value) || !ps2_wait_output_full()) {
+            return false;
+        }
+        uint8_t response = port_in8(PS2_DATA_PORT);
+        if (response == 0xfa) {
+            return true;
+        }
+        if (response != 0xfe) {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool platform_init_keyboard(void) {
+    if (!ps2_write_command(0xad) || !ps2_write_command(0xa7)) {
+        return false;
+    }
+    ps2_flush_output();
+
+    if (!ps2_write_command(0x20) || !ps2_wait_output_full()) {
+        return false;
+    }
+    uint8_t configuration = port_in8(PS2_DATA_PORT);
+    configuration &= (uint8_t)~0x03; /* Polling mode: disable keyboard/mouse IRQs. */
+    configuration |= 0x40;           /* Translate keyboard set 2 to set 1. */
+
+    if (!ps2_write_command(0x60) || !ps2_write_data(configuration) ||
+        !ps2_write_command(0xae)) {
+        return false;
+    }
+
+    /* Use scan-code set 2; the controller exposes translated set-1 bytes. */
+    return ps2_send_keyboard_byte(0xf5) &&
+           ps2_send_keyboard_byte(0xf0) &&
+           ps2_send_keyboard_byte(0x02) &&
+           ps2_send_keyboard_byte(0xf4);
 }
 
 static void idt_set_handler(uint8_t vector, void (*handler)(void)) {
@@ -152,12 +257,24 @@ void platform_delay(uint64_t milliseconds) {
     }
 }
 
+uint64_t platform_random_seed(void) {
+    uint32_t low;
+    uint32_t high;
+    __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | low;
+}
+
 /* Return one PS/2 scan-code byte, or -1 when the controller has no data. */
 int32_t platform_poll_key(void) {
-    if ((port_in8(0x64) & 0x01) == 0) {
+    uint8_t status = port_in8(PS2_STATUS_PORT);
+    if ((status & PS2_STATUS_OUTPUT_FULL) == 0) {
         return -1;
     }
-    return (int32_t)port_in8(0x60);
+    uint8_t data = port_in8(PS2_DATA_PORT);
+    if ((status & (PS2_STATUS_AUX_DATA | PS2_STATUS_ERROR)) != 0) {
+        return -1;
+    }
+    return (int32_t)data;
 }
 
 __attribute__((noreturn)) 
