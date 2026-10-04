@@ -25,6 +25,26 @@ limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
 static uint64_t terminal_state[2];
 static struct limine_framebuffer *framebuffer;
+volatile uint64_t platform_timer_ticks;
+
+struct idt_entry {
+    uint16_t offset_low;
+    uint16_t selector;
+    uint8_t ist;
+    uint8_t attributes;
+    uint16_t offset_middle;
+    uint32_t offset_high;
+    uint32_t reserved;
+} __attribute__((packed));
+
+struct idt_pointer {
+    uint16_t limit;
+    uint64_t address;
+} __attribute__((packed));
+
+static struct idt_entry idt[256] __attribute__((aligned(16)));
+
+extern void platform_timer_interrupt_entry(void);
 
 extern const uint8_t _binary_font_psf_start[];
 extern const uint8_t _binary_font_psf_end[];
@@ -59,21 +79,77 @@ uint64_t platform_font_size(void) {
 
 uint64_t *platform_terminal_state(void) { return terminal_state; }
 
-/*
- * A temporary frame delay until the kernel has a timer driver.  Keeping it on
- * the platform side makes the busy loop observable to the compiler and easy
- * to replace with a real timer interrupt later.
- */
-void platform_delay(uint64_t iterations) {
-    while (iterations-- != 0) {
-        __asm__ volatile("pause");
-    }
-}
-
 static inline uint8_t port_in8(uint16_t port) {
     uint8_t value;
     __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
+}
+
+static inline void port_out8(uint16_t port, uint8_t value) {
+    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static inline void io_wait(void) {
+    port_out8(0x80, 0);
+}
+
+static void idt_set_handler(uint8_t vector, void (*handler)(void)) {
+    uint64_t address = (uint64_t)handler;
+    uint16_t code_selector;
+    __asm__ volatile("mov %%cs, %0" : "=r"(code_selector));
+    idt[vector].offset_low = (uint16_t)address;
+    idt[vector].selector = code_selector;
+    idt[vector].ist = 0;
+    idt[vector].attributes = 0x8e;
+    idt[vector].offset_middle = (uint16_t)(address >> 16);
+    idt[vector].offset_high = (uint32_t)(address >> 32);
+    idt[vector].reserved = 0;
+}
+
+static void pic_remap_and_mask(void) {
+    port_out8(0x20, 0x11);
+    io_wait();
+    port_out8(0xa0, 0x11);
+    io_wait();
+    port_out8(0x21, 0x20);
+    io_wait();
+    port_out8(0xa1, 0x28);
+    io_wait();
+    port_out8(0x21, 0x04);
+    io_wait();
+    port_out8(0xa1, 0x02);
+    io_wait();
+    port_out8(0x21, 0x01);
+    io_wait();
+    port_out8(0xa1, 0x01);
+    io_wait();
+
+    port_out8(0x21, 0xfe);
+    port_out8(0xa1, 0xff);
+}
+
+void platform_init_timer(void) {
+    const uint16_t divisor = 1193; // ~= 1000 Hz
+    platform_timer_ticks = 0;
+    idt_set_handler(32, platform_timer_interrupt_entry);
+
+    struct idt_pointer pointer = {
+        .limit = (uint16_t)(sizeof(idt) - 1),
+        .address = (uint64_t)idt,
+    };
+    __asm__ volatile("lidt %0" : : "m"(pointer));
+
+    pic_remap_and_mask();
+    port_out8(0x43, 0x36);
+    port_out8(0x40, (uint8_t)(divisor & 0xff));
+    port_out8(0x40, (uint8_t)(divisor >> 8));
+}
+
+void platform_delay(uint64_t milliseconds) {
+    uint64_t deadline = platform_timer_ticks + milliseconds;
+    while ((int64_t)(platform_timer_ticks - deadline) < 0) {
+        __asm__ volatile("sti; hlt; cli" ::: "memory");
+    }
 }
 
 /* Return one PS/2 scan-code byte, or -1 when the controller has no data. */

@@ -95,10 +95,27 @@ object IO {
     val state = Platform.platform_terminal_state()
     var row = Intrinsics.loadLong(state)
     var column = Intrinsics.loadLong(at(state, 8L))
+    val terminalWidth = width / FontWidth
 
     if character == 10.toByte then
       column = 0
       row += 1
+    else if character == 8.toByte then
+      if column > 0 then column -= 1
+      else if row > 0 then
+        row -= 1
+        column = terminalWidth - 1
+      drawCharacter(
+        address,
+        pitch,
+        font,
+        fontHeight,
+        ' '.toByte,
+        column * FontWidth,
+        row * fontHeight,
+        Colors.LightGray,
+        Colors.Black
+      )
     else
       drawCharacter(
         address,
@@ -113,7 +130,6 @@ object IO {
       )
       column += 1
 
-      val terminalWidth = width / FontWidth
       if column >= terminalWidth then
         column = 0
         row += 1
@@ -138,6 +154,42 @@ object IO {
       terminalPutCharacter(address, width, height, pitch, font, fontHeight, character)
       index += 1
       character = Intrinsics.loadByte(at(text, index))
+
+  def writeCharacter(character: Byte): Unit =
+    if !Platform.platform_check_framebuffer() then Platform.platform_halt()
+    val font = Platform.platform_font_address()
+    val fontSize = Platform.platform_font_size()
+    if !isValidPsf1(font, fontSize) then Platform.platform_halt()
+    terminalPutCharacter(
+      Platform.platform_framebuffer_address(),
+      Platform.platform_framebuffer_width(),
+      Platform.platform_framebuffer_height(),
+      Platform.platform_framebuffer_pitch(),
+      font,
+      psf1FontHeight(font),
+      character
+    )
+
+  def drawTerminalCursor(visible: Boolean): Unit =
+    if !Platform.platform_check_framebuffer() then Platform.platform_halt()
+    val font = Platform.platform_font_address()
+    val fontSize = Platform.platform_font_size()
+    if !isValidPsf1(font, fontSize) then Platform.platform_halt()
+    val state = Platform.platform_terminal_state()
+    val row = Intrinsics.loadLong(state)
+    val column = Intrinsics.loadLong(at(state, 8L))
+    val fontHeight = psf1FontHeight(font)
+    drawCharacter(
+      Platform.platform_framebuffer_address(),
+      Platform.platform_framebuffer_pitch(),
+      font,
+      fontHeight,
+      if visible then '_'.toByte else ' '.toByte,
+      column * FontWidth,
+      row * fontHeight,
+      Colors.LightGray,
+      Colors.Black
+    )
 
   def drawTextAt(x: Int, y: Int, text: CString, foreground: Int, background: Int): Unit =
     if !Platform.platform_check_framebuffer() then Platform.platform_halt()

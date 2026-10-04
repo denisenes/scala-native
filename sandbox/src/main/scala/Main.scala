@@ -1,9 +1,9 @@
 import scala.scalanative.unsafe.*
-import kernel.Tetris
+import kernel.CommandLine
 
 @exported("kmain")
 def kmain(): Int =
-  Tetris.run()
+  CommandLine.run()
   0
 
 // TODO: use as entrypoint

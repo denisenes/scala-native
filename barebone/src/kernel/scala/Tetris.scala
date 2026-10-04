@@ -43,7 +43,6 @@ final case class LShape()
       Array(Array(false, false, true), Array(true, true, true))
     )
 
-/** Pixel-based Tetris renderer, game state and keyboard-controlled game loop. */
 object Tetris:
   private inline val BoardWidth = 10
   private inline val BoardHeight = 20
@@ -53,8 +52,7 @@ object Tetris:
   private inline val PanelWidth = 224
   private inline val BorderSize = 3
 
-  // A short delay keeps keyboard polling responsive. Gravity is counted in ticks.
-  private inline val InputPollDelay = 100000L
+  private inline val InputPollDelayMs = 10L
   private inline val BaseDropTicks = 50
   private inline val DropTicksPerLevel = 4
   private inline val MinimumDropTicks = 10
@@ -241,6 +239,13 @@ object Tetris:
       Colors.LightGray,
       Colors.Black
     )
+    IO.drawTextAt(
+      panelLeft,
+      boardTop + 264,
+      c"Q           QUIT",
+      Colors.LightGray,
+      Colors.Black
+    )
     drawStats()
 
   private def drawStats(): Unit =
@@ -378,20 +383,24 @@ object Tetris:
       drawFigureAt(currentFigure, rotation, pieceX, pieceY, currentFigure.color)
       drawStats()
 
-  private def handleKeyboard(): Unit =
+  private def handleKeyboard(): Boolean =
+    var quit = false
     var scanCode = Platform.platform_poll_key()
-    while scanCode >= 0 do
+    while scanCode >= 0 && !quit do
       if scanCode == 0xe0 then extendedScanCode = true
       else
-        if extendedScanCode && (scanCode & 0x80) == 0 then
-          scanCode match
-            case 0x4b => moveHorizontally(-1) // Left
-            case 0x4d => moveHorizontally(1)  // Right
-            case 0x48 => rotateClockwise()    // Up
-            case 0x50 => stepDown(true)       // Down
-            case _    => ()
+        if (scanCode & 0x80) == 0 then
+          if extendedScanCode then
+            scanCode match
+              case 0x4b => moveHorizontally(-1) // Left
+              case 0x4d => moveHorizontally(1)  // Right
+              case 0x48 => rotateClockwise()    // Up
+              case 0x50 => stepDown(true)       // Down
+              case _    => ()
+          else if scanCode == 0x10 then quit = true // Q
         extendedScanCode = false
-      scanCode = Platform.platform_poll_key()
+      if !quit then scanCode = Platform.platform_poll_key()
+    quit
 
   private def dropTicksForCurrentLevel(): Int =
     val ticks = BaseDropTicks - (level - 1) * DropTicksPerLevel
@@ -412,10 +421,13 @@ object Tetris:
     drawFigureAt(currentFigure, rotation, pieceX, pieceY, currentFigure.color)
 
     var gravityTicks = 0
-    while true do
-      Platform.platform_delay(InputPollDelay)
-      handleKeyboard()
-      gravityTicks += 1
-      if gravityTicks >= dropTicksForCurrentLevel() then
-        gravityTicks = 0
-        stepDown(false)
+    var running = true
+    while running do
+      Platform.platform_delay(InputPollDelayMs)
+      running = !handleKeyboard()
+      if running then
+        gravityTicks += 1
+        if gravityTicks >= dropTicksForCurrentLevel() then
+          gravityTicks = 0
+          stepDown(false)
+    IO.clearScreen()
