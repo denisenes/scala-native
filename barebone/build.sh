@@ -45,7 +45,6 @@ done
 # ---------------------------------------------------------------------------
 if [[ "$WITH_SBT" == 1 ]]; then
     echo "=== Compiling Scala sandbox (sbt clean && sbt sandbox3/run) ==="
-    (cd "$REPO_DIR" && sbt clean)
     # Include scala kernel part into sandbox compilation set 
     cp -r "$SRC_DIR/kernel/scala" "$REPO_DIR/sandbox/src/main/scala/kernel"
     # Build all
