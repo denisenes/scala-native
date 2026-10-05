@@ -20,6 +20,8 @@ object GC {
     def dump_non_volatile_regs(): Unit = extern
   }
 
+  // TODO: review and fix this vibe-coded shit, it doesn't work in some cases
+  
   private final val WordSize = 8L
   private final val BlockSize = 2048L
   private final val BlockHeaderSize = 64
@@ -44,12 +46,17 @@ object GC {
   private final val StatEmptyOffset = 64
   private final val StatPartialOffset = 72
   private final val StatFullOffset = 80
+  private final val StatCollectionsOffset = 88
+  private final val ArenaTopOffset = 96
+  private final val ArenaEndOffset = 104
   private final val HeapletsOffset = 128
   private final val PartialHeadsOffset = HeapletsOffset + UnitCount * 8
   private final val MarkStackOffset = PartialHeadsOffset + UnitCount * 8
   private final val MarkStackEntries = 16384
   private final val LogScratchOffset = MarkStackOffset + MarkStackEntries * 8
   private final val LogScratchSize = 512
+  private final val ArenaOffset = LogScratchOffset + LogScratchSize
+  private final val ArenaSize = 4096
 
   private final val RttiOffset = 0
   private final val ArrayLengthOffset = 8
@@ -146,10 +153,27 @@ object GC {
     result
   }
 
+  // Memory handed out while a collection is running: the logging code boxes
+  // Ptr values (c"" literals, fromRawPtr), and those boxes must neither
+  // re-enter the collector nor touch block metadata. Served from a private
+  // scratch arena, reset per collection; exhaustion halts without allocating.
+  private def arenaAlloc(size: Long, info: RawPtr): RawPtr = {
+    var slotSize = (size + 7L) & ~7L
+    if slotSize < WordSize then slotSize = WordSize
+    val top = loadLong(meta(ArenaTopOffset))
+    val next = top + slotSize
+    if next > loadLong(meta(ArenaEndOffset)) then Platform.platform_halt()
+    storeLong(meta(ArenaTopOffset), next)
+    val obj = castLongToRawPtr(top)
+    if !isNull(info) then storeRawPtr(elemRawPtr(obj, RttiOffset), info)
+    obj
+  }
+
   private def alloc(size: Long, info: RawPtr): RawPtr = {
-    if loadLong(meta(CollectingOffset)) != 0L then
-      System.fatal(c"[GC]: allocation during collection")
-    if size > MaxObjectSize then System.fatal(c"[GC]: object too large")
+    if loadLong(meta(CollectingOffset)) != 0L then arenaAlloc(size, info)
+    else {
+    if size > MaxObjectSize then 
+      System.fatal(c"[GC]: object too large")
 
     var slotSize = (size + 7L) & ~7L
     if slotSize < WordSize then slotSize = WordSize
@@ -163,6 +187,7 @@ object GC {
 
     if !isNull(info) then storeRawPtr(elemRawPtr(obj, RttiOffset), info)
     obj
+    }
   }
 
   def allocRaw(size: Long): RawPtr = alloc(size, nullPtr)
@@ -195,6 +220,9 @@ object GC {
     storeRawPtr(meta(MarkStackEndOffset), at(stackBase, MarkStackEntries.toLong * WordSize))
     storeLong(meta(CollectingOffset), 0L)
     storeLong(meta(EmptyHeadOffset), 0L)
+    storeLong(meta(StatCollectionsOffset), 0L)
+    storeLong(meta(ArenaTopOffset), lo + ArenaOffset)
+    storeLong(meta(ArenaEndOffset), lo + ArenaOffset + ArenaSize)
 
     var i = 1
     while i <= UnitCount do
@@ -202,7 +230,7 @@ object GC {
       storeRawPtr(meta(partialOffset(i)), nullPtr)
       i += 1
 
-    val metadataEnd = lo + LogScratchOffset + LogScratchSize
+    val metadataEnd = lo + ArenaOffset + ArenaSize
     val blocksStart = (metadataEnd + BlockSize - 1L) & ~(BlockSize - 1L)
     val blocksEnd = hi & ~(BlockSize - 1L)
     storeLong(meta(BlocksStartOffset), blocksStart)
@@ -274,13 +302,18 @@ object GC {
             storeRawPtr(meta(MarkStackTopOffset), elemRawPtr(top, 8))
   }
 
+  private def popMark(): RawPtr = {
+    val top = elemRawPtr(loadRawPtr(meta(MarkStackTopOffset)), -8)
+    storeRawPtr(meta(MarkStackTopOffset), top)
+    loadRawPtr(top)
+  }
+
   private def drainMarkStack(): Unit = {
-    val base = loadRawPtr(meta(MarkStackBaseOffset))
-    var top = loadRawPtr(meta(MarkStackTopOffset))
-    while castRawPtrToLong(top) != castRawPtrToLong(base) do
-      top = elemRawPtr(top, -8)
-      storeRawPtr(meta(MarkStackTopOffset), top)
-      val obj = loadRawPtr(top)
+    val base = castRawPtrToLong(loadRawPtr(meta(MarkStackBaseOffset)))
+    // Always re-read the shared top: markCandidate pushes above it while we
+    // drain, and those entries must be drained too.
+    while loadLong(meta(MarkStackTopOffset)) != base do
+      val obj = popMark()
       val objectStart = castRawPtrToLong(obj)
       val block = castLongToRawPtr(objectStart & ~(BlockSize - 1L))
       scanRange(objectStart, objectStart + slotSizeOf(block))
@@ -327,6 +360,8 @@ object GC {
 
   private def collect(): Unit = {
     storeLong(meta(CollectingOffset), 1L)
+    storeLong(meta(ArenaTopOffset), loadLong(meta(ArenaEndOffset)) - ArenaSize)
+    storeLong(meta(StatCollectionsOffset), loadLong(meta(StatCollectionsOffset)) + 1L)
     washing()
     GCSupport.dump_non_volatile_regs()
     classify()
@@ -336,9 +371,9 @@ object GC {
 
   @exported("k_scalanative_GC_collect")
   def gcCollect(): Unit = collect()
-  // GC-end logging must never allocate (malloc would re-enter the collector),
-  // so text and numbers are formatted into a scratch buffer reserved at init
-  // and printed through the allocation-free CString path.
+  // GC-end logging allocates only Ptr boxes from the scratch arena (see
+  // arenaAlloc): text and numbers are formatted into a reserved buffer and
+  // printed through the CString path without touching the managed heap.
   private def printStats(): Unit = {
     val scratch = at(HeapBounds.lo, LogScratchOffset.toLong)
     var p = scratch
@@ -405,7 +440,7 @@ object GC {
   def gcGetUsedHeapSize(): Long = loadLong(meta(StatLiveOffset))
 
   @exported("k_scalanative_GC_stats_collection_total")
-  def gcStatsCollectionTotal(): Long = -1L
+  def gcStatsCollectionTotal(): Long = loadLong(meta(StatCollectionsOffset))
 
   @exported("k_scalanative_GC_stats_collection_duration_total")
   def gcStatsCollectionDurationTotal(): Long = -1L

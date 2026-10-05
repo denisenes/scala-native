@@ -170,9 +170,10 @@ final class Integer(val _value: scala.Int)
   protected def %(x: scala.Double): scala.Double = _value % x
 }
 
-private[lang] object IntegerCache {
-  private[lang] val cache = new Array[java.lang.Integer](256)
-}
+// TODO: large allocations are not supported yet
+//private[lang] object IntegerCache {
+//  private[lang] val cache = new Array[java.lang.Integer](256)
+//}
 
 object Integer {
   final val TYPE = scala.Predef.classOf[scala.scalanative.runtime.PrimitiveInt]
@@ -507,21 +508,12 @@ object Integer {
   @inline def toUnsignedLong(x: scala.Int): scala.Long =
     intToULong(x)
 
-  import IntegerCache.cache
-
   @inline def valueOf(intValue: scala.Int): Integer = {
     if (intValue.toByte.toInt != intValue) {
       new Integer(intValue)
     } else {
       val idx = intValue + 128
-      val cached = cache(idx)
-      if (cached != null) {
-        cached
-      } else {
-        val newint = new Integer(intValue)
-        cache(idx) = newint
-        newint
-      }
+      new Integer(intValue)
     }
   }
 

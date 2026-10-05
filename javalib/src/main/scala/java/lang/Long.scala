@@ -480,21 +480,12 @@ object Long {
     }
   }
 
-  import LongCache.cache
-
   @inline def valueOf(longValue: scala.Long): Long = {
     if (longValue.toByte.toLong != longValue) {
       new Long(longValue)
     } else {
       val idx = (longValue + 128).toInt
-      val cached = cache(idx)
-      if (cached != null) {
-        cached
-      } else {
-        val newlong = new Long(longValue)
-        cache(idx) = newlong
-        newlong
-      }
+      new Long(longValue)
     }
   }
 
@@ -700,6 +691,7 @@ object Long {
 
 }
 
-private[lang] object LongCache {
-  private[lang] val cache = new Array[java.lang.Long](256)
-}
+// TODO: large allocations are not supported yet
+//private[lang] object LongCache {
+//  private[lang] val cache = new Array[java.lang.Long](256)
+//}

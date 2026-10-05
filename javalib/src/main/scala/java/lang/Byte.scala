@@ -221,18 +221,9 @@ object Byte {
   @inline def toUnsignedLong(x: scala.Byte): scala.Long =
     byteToULong(x)
 
-  import ByteCache.cache
-
   @inline def valueOf(byteValue: scala.Byte): Byte = {
     val idx = byteValue - MIN_VALUE
-    val cached = cache(idx)
-    if (cached != null) {
-      cached
-    } else {
-      val newbyte = new Byte(byteValue)
-      cache(idx) = newbyte
-      newbyte
-    }
+    new Byte(byteValue)
   }
 
   @inline def valueOf(s: String): Byte =
@@ -242,6 +233,7 @@ object Byte {
     valueOf(parseByte(s, radix))
 }
 
-private[lang] object ByteCache {
-  private[lang] val cache = new Array[java.lang.Byte](256)
-}
+// TODO: large allocations are not supported yet
+//private[lang] object ByteCache {
+//  private[lang] val cache = new Array[java.lang.Byte](256)
+//}
