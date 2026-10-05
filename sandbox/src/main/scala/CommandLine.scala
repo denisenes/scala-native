@@ -1,69 +1,59 @@
+import scala.annotation.tailrec
+import scala.scalanative.runtime.toRawPtr
 import scala.scalanative.unsafe.*
-import kernel.{IO, System, Keyboard, Colors}
+import kernel.{IO, System, Keyboard, Colors, Std, CStringUtils}
 
 object CommandLine:
   private inline val MaxCommandLength = 31
   private inline val InputPollDelayMs = 10L
   private inline val CursorBlinkPeriodMs = 500L
-  private val command = new Array[Byte](MaxCommandLength)
 
-  private def isTetrisCommand(length: Int): Boolean =
-    length == 6 &&
-      command(0) == 't'.toByte &&
-      command(1) == 'e'.toByte &&
-      command(2) == 't'.toByte &&
-      command(3) == 'r'.toByte &&
-      command(4) == 'i'.toByte &&
-      command(5) == 's'.toByte
+  final case class Command(name: CString, action: () => Boolean)
 
-  private def isShutdownCommand(length: Int): Boolean =
-    length == 8 &&
-      command(0) == 's'.toByte &&
-      command(1) == 'h'.toByte &&
-      command(2) == 'u'.toByte &&
-      command(3) == 't'.toByte &&
-      command(4) == 'd'.toByte &&
-      command(5) == 'o'.toByte &&
-      command(6) == 'w'.toByte &&
-      command(7) == 'n'.toByte
+  private val commands: List[Command] = List(
+    Command(c"tetris", () => { Tetris.run(); System.println(c"Exited Tetris."); true }),
+    Command(c"shutdown", () => false)
+  )
 
-  private def printPrompt(): Unit = System.print(c"scalash> ")
+  private def matches(name: CString, input: CString): Boolean =
+    Std.strncmp(toRawPtr(name), toRawPtr(input), MaxCommandLength + 1L) == 0
+
+  private def step(typed: List[Byte], character: Int): Option[List[Byte]] =
+    if character == '\n' then
+      IO.writeCharacter('\n'.toByte)
+      val input = CStringUtils.toCString(typed)
+      val running = commands.find(c => matches(c.name, input)) match
+        case Some(command) => command.action()
+        case None =>
+          if typed.nonEmpty then System.println(c"Unknown command")
+          true
+      if running then { System.print(c"scalash> "); Some(Nil) } else None
+    else if character == 8 then
+      if typed.isEmpty then Some(Nil) else { IO.writeCharacter(8.toByte); Some(typed.init) }
+    else if typed.length < MaxCommandLength then
+      IO.writeCharacter(character.toByte)
+      Some(typed :+ character.toByte)
+    else Some(typed)
+
+  @tailrec
+  private def inputLoop(typed: List[Byte], cursorVisible: Boolean, cursorElapsedMs: Long): Unit =
+    val character = Keyboard.pollCharacter()
+    if character < 0 then
+      System.sleep(InputPollDelayMs)
+      val elapsed = cursorElapsedMs + InputPollDelayMs
+      if elapsed >= CursorBlinkPeriodMs then
+        IO.drawTerminalCursor(!cursorVisible)
+        inputLoop(typed, !cursorVisible, 0L)
+      else inputLoop(typed, cursorVisible, elapsed)
+    else
+      IO.drawTerminalCursor(visible = false)
+      step(typed, character) match
+        case Some(next) =>
+          IO.drawTerminalCursor(visible = true)
+          inputLoop(next, true, 0L)
+        case None => ()
 
   def run(): Unit =
-    var length = 0
-    var cursorVisible = true
-    var cursorElapsedMs = 0L
-    var running = true
-    printPrompt()
+    System.print(c"scalash> ")
     IO.drawTerminalCursor(visible = true)
-    while running do
-      val character = Keyboard.pollCharacter()
-      if character < 0 then
-        System.sleep(InputPollDelayMs)
-        cursorElapsedMs += InputPollDelayMs
-        if cursorElapsedMs >= CursorBlinkPeriodMs then
-          cursorVisible = !cursorVisible
-          cursorElapsedMs = 0L
-          IO.drawTerminalCursor(cursorVisible)
-      else
-        IO.drawTerminalCursor(visible = false)
-        if character == '\n' then
-          IO.writeCharacter('\n'.toByte)
-          if isTetrisCommand(length) then
-            Tetris.run()
-            System.println(c"Exited Tetris.")
-          else if isShutdownCommand(length) then running = false
-          else if length > 0 then System.println(c"Unknown command")
-          length = 0
-          if running then printPrompt()
-        else if character == 8 then
-          if length > 0 then
-            length -= 1
-            IO.writeCharacter(8.toByte)
-        else if length < MaxCommandLength then
-          command(length) = character.toByte
-          length += 1
-          IO.writeCharacter(character.toByte)
-        cursorVisible = true
-        cursorElapsedMs = 0L
-        IO.drawTerminalCursor(visible = true)
+    inputLoop(Nil, cursorVisible = true, cursorElapsedMs = 0L)

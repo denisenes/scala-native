@@ -65,5 +65,13 @@ object CStringUtils {
     fromRawPtr[Byte](at(buffer, index + 1L))
   }
 
+  def toCString(bytes: List[Byte]): CString = {
+    val buffer = Std.malloc(bytes.length + 1L)
+    bytes.zipWithIndex.foreach((byte, index) =>
+      Intrinsics.storeByte(at(buffer, index.toLong), byte))
+    Intrinsics.storeByte(at(buffer, bytes.length.toLong), 0)
+    fromRawPtr[Byte](buffer)
+  }
+
   private def hexDigit(digit: Int): Byte = (if digit < 10 then '0' + digit else 'a' + digit - 10).toByte
 }
