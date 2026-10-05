@@ -12,6 +12,7 @@ object CommandLine:
 
   private val commands: List[Command] = List(
     Command(c"tetris", () => { Tetris.run(); System.println(c"Exited Tetris."); true }),
+    Command(c"bench", () => { GCBench.run(); true }),
     Command(c"shutdown", () => false)
   )
 
