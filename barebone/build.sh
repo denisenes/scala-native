@@ -107,6 +107,17 @@ clang \
     -mno-red-zone \
     -mcmodel=kernel
 
+echo "=== Compile gc_support.s ==="
+clang \
+    --target=x86_64-unknown-none-elf \
+    -c "$SRC_DIR/kernel/asm/gc_support.S" \
+    -o gc_support.o \
+    -ffreestanding \
+    -fno-pic \
+    -m64 \
+    -mno-red-zone \
+    -mcmodel=kernel
+
 echo "=== Compile platfrom.c ==="
 clang \
     --target=x86_64-unknown-none-elf \
@@ -149,6 +160,7 @@ ld.lld \
     -z max-page-size=0x1000 \
     -T "$SRC_DIR/linker.ld" \
     entry.o \
+    gc_support.o \
     platform.o \
     font.o \
     stubs.o \

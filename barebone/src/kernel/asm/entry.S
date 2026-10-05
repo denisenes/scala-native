@@ -10,6 +10,7 @@
 
 kernel_main:
     cli
+    movq %rsp, __gc_stack_top(%rip)
     andq $-16, %rsp
 
     call platform_init

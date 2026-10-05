@@ -60,22 +60,26 @@ SECTIONS
     . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .data : {
+        __gc_data_start = .;
         *(.data .data.*)
-    } :data
-
-    .gc_heap_bounds : {
-        __gc_heap_lo = .;  QUAD(__gc_heap_start);
-        __gc_heap_hi = .;  QUAD(__gc_heap_end);
     } :data
 
     .bss : {
         *(.bss .bss.*)
         *(COMMON)
+        __gc_data_end = .;
+    } :data
+
+    .gc_heap_bounds : {
+        __gc_heap_lo = .;  QUAD(__gc_heap_start);
+        __gc_heap_hi = .;  QUAD(__gc_heap_end);
+        __gc_data_lo = .;  QUAD(__gc_data_start);
+        __gc_data_hi = .;  QUAD(__gc_data_end);
     } :data
 
     .heap ALIGN(16) (NOLOAD) : {
         __gc_heap_start = .;
-        . += 64M; // heap size
+        . += 16M; // heap size (GC metadata + mark stack take ~134K of it)
         __gc_heap_end = .;
     } :data
 
