@@ -48,3 +48,10 @@ object Keyboard:
         extendedScanCode = false
         if result >= 0 then scanning = false
     result
+
+  def pollKeys(handle: Int => Boolean): Unit =
+    var scanning = true
+    while scanning do
+      val scanCode = Platform.platform_poll_key()
+      if scanCode < 0 then scanning = false
+      else if !handle(scanCode) then scanning = false

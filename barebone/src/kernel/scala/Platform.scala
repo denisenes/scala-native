@@ -5,7 +5,7 @@ import scala.scalanative.unsafe.*
 import kernel.IO
 
 @extern
-object Platform {
+private[kernel] object Platform {
   def platform_init_framebuffer(): CBool = extern
   def platform_check_framebuffer(): CBool = extern
   def platform_framebuffer_address(): RawPtr = extern

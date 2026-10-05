@@ -1,5 +1,4 @@
 import scala.scalanative.unsafe.*
-import kernel.CommandLine
 
 @exported("kmain")
 def kmain(): Int =

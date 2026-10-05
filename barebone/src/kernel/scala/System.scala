@@ -37,4 +37,12 @@ object System {
 
     def println(value: RawPtr): Unit = { print(value); newline() }
 
+    def sleep(ms: Long): Unit = Platform.platform_delay(ms)
+
+    def screenSize(): (Int, Int) = (
+        Platform.platform_framebuffer_height().toInt,
+        Platform.platform_framebuffer_width().toInt
+    )
+
+    def randomSeed(): Long = Platform.platform_random_seed()
 }

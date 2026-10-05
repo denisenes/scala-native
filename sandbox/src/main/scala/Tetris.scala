@@ -1,6 +1,5 @@
-package kernel
-
 import scala.scalanative.unsafe.*
+import kernel.{IO, System, Keyboard, Colors}
 
 sealed abstract class Tetromino(
     val color: Int,
@@ -132,8 +131,7 @@ object Tetris:
       case _ => figure.pixels(x)(baseWidth - 1 - y)
 
   private def configureLayout(): Unit =
-    val framebufferWidth = Platform.platform_framebuffer_width().toInt
-    val framebufferHeight = Platform.platform_framebuffer_height().toInt
+    val (framebufferHeight, framebufferWidth) = System.screenSize()
     val availableWidth = framebufferWidth - ScreenPadding - PanelGap - PanelWidth
     val availableHeight = framebufferHeight - ScreenPadding
     val widthCellSize = availableWidth / BoardWidth
@@ -346,8 +344,7 @@ object Tetris:
 
   private def handleKeyboard(): Boolean =
     var quit = false
-    var scanCode = Platform.platform_poll_key()
-    while scanCode >= 0 && !quit do
+    Keyboard.pollKeys { scanCode =>
       if scanCode == 0xe0 then extendedScanCode = true
       else
         if (scanCode & 0x80) == 0 then
@@ -360,7 +357,8 @@ object Tetris:
               case _    => ()
           else if scanCode == 0x10 then quit = true // Q
         extendedScanCode = false
-      if !quit then scanCode = Platform.platform_poll_key()
+      !quit // stop polling as soon as Q was pressed
+    }
     quit
 
   private def dropTicksForCurrentLevel(): Int =
@@ -370,7 +368,7 @@ object Tetris:
   def run(): Unit =
     resetGame()
     configureLayout()
-    randomState = Platform.platform_random_seed()
+    randomState = System.randomSeed()
     if randomState == 0 then randomState = 1L
     figureBagIndex = figures.length
     selectNextFigure()
@@ -385,7 +383,7 @@ object Tetris:
     var gravityTicks = 0
     var running = true
     while running do
-      Platform.platform_delay(InputPollDelayMs)
+      System.sleep(InputPollDelayMs)
       running = !handleKeyboard()
       if running then
         gravityTicks += 1

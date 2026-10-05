@@ -1,6 +1,5 @@
-package kernel
-
 import scala.scalanative.unsafe.*
+import kernel.{IO, System, Keyboard, Colors}
 
 object CommandLine:
   private inline val MaxCommandLength = 31
@@ -17,18 +16,30 @@ object CommandLine:
       command(4) == 'i'.toByte &&
       command(5) == 's'.toByte
 
-  private def printPrompt(): Unit = System.print(c"scalos> ")
+  private def isShutdownCommand(length: Int): Boolean =
+    length == 8 &&
+      command(0) == 's'.toByte &&
+      command(1) == 'h'.toByte &&
+      command(2) == 'u'.toByte &&
+      command(3) == 't'.toByte &&
+      command(4) == 'd'.toByte &&
+      command(5) == 'o'.toByte &&
+      command(6) == 'w'.toByte &&
+      command(7) == 'n'.toByte
+
+  private def printPrompt(): Unit = System.print(c"scalash> ")
 
   def run(): Unit =
     var length = 0
     var cursorVisible = true
     var cursorElapsedMs = 0L
+    var running = true
     printPrompt()
     IO.drawTerminalCursor(visible = true)
-    while true do
+    while running do
       val character = Keyboard.pollCharacter()
       if character < 0 then
-        Platform.platform_delay(InputPollDelayMs)
+        System.sleep(InputPollDelayMs)
         cursorElapsedMs += InputPollDelayMs
         if cursorElapsedMs >= CursorBlinkPeriodMs then
           cursorVisible = !cursorVisible
@@ -41,9 +52,10 @@ object CommandLine:
           if isTetrisCommand(length) then
             Tetris.run()
             System.println(c"Exited Tetris.")
+          else if isShutdownCommand(length) then running = false
           else if length > 0 then System.println(c"Unknown command")
           length = 0
-          printPrompt()
+          if running then printPrompt()
         else if character == 8 then
           if length > 0 then
             length -= 1
